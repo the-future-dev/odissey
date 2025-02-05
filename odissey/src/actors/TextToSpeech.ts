@@ -1,4 +1,4 @@
-import { HF_API_TOKEN_READ, TEXT_TO_AUDIO_MODEL_NAME } from '../constants/Models';
+import { HF_API_TOKEN, TEXT_TO_AUDIO_MODEL_NAME } from '../constants/ModelConstants';
 import { writeAsStringAsync, documentDirectory, EncodingType } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { Audio } from 'expo-av';

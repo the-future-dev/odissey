@@ -1,5 +1,4 @@
-
-import { HF_API_TOKEN_READ, NARRATOR_MODEL_NAME } from '../constants/Models';
+import { HF_API_TOKEN, NARRATOR_MODEL_NAME } from '../constants/ModelConstants';
 import { HfInference } from '@huggingface/inference';
 
 interface Message {
@@ -10,40 +9,57 @@ interface Message {
 class Narrator {
   private messages: Message[];
   private maxTokens: number;
-  private apiKey: string;
   private narratorInference: HfInference;
 
-  constructor(apiKey: string, maxTokens: number) {
+  constructor() {
     this.messages = [];
-    this.maxTokens = maxTokens;
-    this.apiKey = apiKey;
-    this.narratorInference = new HfInference(apiKey);
+    this.maxTokens = 300;
+    this.narratorInference = new HfInference(HF_API_TOKEN);
+    
   }
 
   public setMessages(messages: Message[]): void {
-    this.messages = messages;
+    this.messages = messages.filter(msg => msg && msg.content);
   }
 
-  private async inferenceEndpoint(): Promise<string> {
+  public getMessages(): Message[] {
+    return this.messages;
+  }
+
+  private async inferenceEndpoint(): Promise<AsyncGenerator<string>> {
     try {
-      const response = await this.narratorInference.chatCompletion({
+      const stream = this.narratorInference.chatCompletionStream({
         model: NARRATOR_MODEL_NAME,
         messages: this.messages,
         max_tokens: this.maxTokens,
-        stream: false,
+        // temperature: 0.1,
       });
-      return response.choices[0]?.message?.content || "";
+
+      async function* generateText() {
+        let text = '';
+        for await (const chunk of stream) {
+          if (chunk.choices && chunk.choices.length > 0 && chunk.choices[0].delta.content) {
+            text += chunk.choices[0].delta.content;
+            yield text;
+          }
+        }
+      }
+
+      return generateText();
     } catch (error) {
       console.error("Error during inference:", error);
-      return "Sorry, I couldn't generate a response.";
+      async function* errorGenerator() {
+        yield "Sorry, I couldn't generate a response.";
+      }
+      return errorGenerator();
     }
   }
 
-  public async chat(): Promise<string> {
+  public async chat(): Promise<AsyncGenerator<string>> {
     return this.inferenceEndpoint();
   }
 }
 
-const narratorInstance = new Narrator(HF_API_TOKEN_READ, 300);
+const narratorInstance = new Narrator();
 export default narratorInstance;
 
