@@ -1,12 +1,21 @@
 # Brainstorm
 
+## Go To Market
+
+How do we want to go to market?
+
+- Children. I don’t know many - ideas?
+- Language. We should ensure correct language in the places we deploy.
+
+I believe we should focus on a key center (ex: Stockholm). Ensure for example that the language works etc. and try the network effect (ex: all the highschools in Stockholm: we give flyers or something physical ex. some sort of playing cards related to the app).
+
 ## Social
 
 The experience should be double:
 
 - **story creation**: (World Building Engine) the person creating the experience. Is the one defining the world and the story around. The experience has to be around the “**writer**”. Ex: *J. K. Rowling in shaping the Harry Potter world*. Is it all defined a priori, or it gets defined while evolving the story? Both: a bit a priori, a bit shaped by the user evolving. The KEY here is that the user defines how the word works by interacting with it: there is need for creativity.
 
-World Building Engine:
+**World Building Engine**
 
 Iterative, co-creation with AI, start with a prompt then back and forth towards shaping:
 
@@ -29,6 +38,23 @@ We need also the persons information in order to place the person as one charact
 
 - Onboarding quiz - ask about preferences
 - Could be re-taken in profile
+
+- **On-Boarding Quiz**
+    
+    idea fast to gather the key data of the person
+    
+- **Extensive Quiz**
+    
+    extensive quiz for personality assessment.
+    
+    - who is the user?
+    - how would it react to particular situations?
+    
+    **IDEA**
+    
+    1. Basic Structure for standard testing: there exists a multitude of these, use the structure of one available
+    2. Enhance with some AI generated questions to gather personality: a quiz that develops based on the answers
+    
 
 ## Coherence in story shaping
 

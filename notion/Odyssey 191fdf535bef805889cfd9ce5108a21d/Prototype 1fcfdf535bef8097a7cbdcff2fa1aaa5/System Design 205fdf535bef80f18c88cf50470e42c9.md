@@ -27,7 +27,11 @@ For each of these, write down the content we want to gather from them and the in
         1. roles of access for functionalities and information
 2. **Domain Model**
     1. UML: class, attributes, relations, ...
-3. **Logical Architecture**: gather together functionalities and the model, with a high level definition of the system parts and a precise (also visually) definition of the user interaction with it.
+3. **Logical High-level Architecture**: gather together functionalities and the model, with a high level definition of the system parts and a precise (also visually) definition of the user interaction with it.
+    - Context Diagram: system ↔ external actors
+    - Container Diagram: runtimes / processes / modules
+    - Component Diagram: key classes, services, interfaces
+    - Record major Technology / Design Decisions (ADRs)
 4. Testing plan
 
 ## Design
