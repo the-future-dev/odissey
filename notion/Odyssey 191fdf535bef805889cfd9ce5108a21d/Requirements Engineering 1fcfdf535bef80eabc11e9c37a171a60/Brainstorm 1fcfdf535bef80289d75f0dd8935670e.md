@@ -1,5 +1,11 @@
 # Brainstorm
 
+World Build Model
+
+a cool functionality to have would be to shape a world by being fed a book / a pdf / a story / a text.
+
+Ex: we feed the harry potter book and we can derive all the information to create a world where the user can interact with it.
+
 ## Go To Market
 
 How do we want to go to market?

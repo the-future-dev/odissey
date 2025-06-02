@@ -23,6 +23,7 @@
 - As a new user (age 7–12), I want to take a quick **on-boarding quiz** so the system tailors to my preferences.
 - As a returning user, I want to access my **profile**, re-take the basic quiz and execute an extensive quiz.
 - As a “Story Creator,” I want to co-create and shape the world (characters, rules, events) by interacting back-and-forth with the “**World Building Engine**”
+- As a “Story Creator” I want to feed a book (text, .pdf, …) to the “World Building Engine” and extrapolate from it a world model, that can be used and or refined.
 - As a “Story Consumer” I want to shape my own story inside a world/narrative by actively interacting with it.
 - As a user, I want immediate feedback (text, animations, audio, video, images) so I feel immersed in the story.
 - As a user, I want my session data saved so I can pause and resume stories later.
@@ -88,8 +89,21 @@ Priority legend
 - **Could have:** Desirable if time and resources permit.
 - **Won't have (this time):** Explicitly out of scope for the current iteration/release.
 
-## **Use-Case Modeling & User Flow Definition**
+## **Use-Case Modeling**
 
-- **Use-Case Diagrams (UML):** Show how users interact with the system's key functions through visual diagrams.
+Show how users interact with the system's key functions through visual diagrams.
 
-- **User Flow Diagrams:** Show the paths users take to complete tasks in the app, helping spot potential problems.
+![1000132844.jpg](Requirements%20Engineering%201fcfdf535bef80eabc11e9c37a171a60/1000132844.jpg)
+
+## Model Dictionary
+
+| **Name** | **Meaning** |
+| --- | --- |
+| Wolrd Artifcats | All such artifacts that ensure that the world generated persists and can be re used (characters, rules, setting, …).  |
+| Narrator Utterance | Inputs that the narrator prompts to the user; inherently it is multi-modal: text, audio, videos, images |
+| User Utterance | Inputs from the user; inherently multimodal such as: text; audio; (pehaps) multiple choice response |
+| User Profile | username, (3rd party sign), age, gender, … |
+| User Personality | All such traits that influence what interactions the user might desire from the application: natural behavior, personality, previous experiences, taste, inclinations |
+|  |  |
+
+[Odissey.pdf](Requirements%20Engineering%201fcfdf535bef80eabc11e9c37a171a60/Odissey.pdf)
