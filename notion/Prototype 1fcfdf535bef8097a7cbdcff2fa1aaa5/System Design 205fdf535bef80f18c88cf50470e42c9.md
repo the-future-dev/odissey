@@ -2,21 +2,19 @@
 
 *How to engineer a piece of software.*
 
-## Requisites
-
-Requirements Engineering:
+## Requirements Engineering:
 
 1. talk with people and get what they want
     
-    [Requirements Engineering](../Requirements%20Engineering%201fcfdf535bef80eabc11e9c37a171a60.md)
+    [Requirements Engineering](Requirements%20Engineering%201fcfdf535bef80eabc11e9c37a171a60.md)
     
 2. define a specific set of functionalities **WE** want to build
 3. prioritize them; categorize as functional and non-functional
 4. generate Use-Case Diagram
 
-Analyze the Requirements: let's take each of the requirements previously defined: shape what the user does with our app and fix how we want the user interaction (no details about UI, just what we want specifically).
+Analyze the Requirements: let's take each of the requirements previously defined: shape what the user does with our app and fix how we want the user interaction (no details about UI, just what we want specifically).
 
-## Problem
+## Problem Analysis
 
 1. **Problem Analysis**: gather our Requirements into buckets of functionalities (ex: Profile, story creation, story consumption...).
 For each of these, write down the content we want to gather from them and the input output interaction of our system. Fit between functionalities and UIs. Match theoretical functionalities to practical ones. Define the external systems. Define roles..
@@ -27,14 +25,14 @@ For each of these, write down the content we want to gather from them and the in
         1. roles of access for functionalities and information
 2. **Domain Model**
     1. UML: class, attributes, relations, …
-3. **Logical High-level Architecture**: gather together functionalities and the model, with a high level definition of the system parts and a precise (also visually) definition of the user interaction with it.
+3. **Logical High-level Architecture**: gather together functionalities and the model, with a high level definition of the system parts and a precise (also visually) definition of the user interaction with it.
     - Context Diagram: system ↔ external actors
     - Container Diagram: runtimes / processes / modules
     - Component Diagram: key classes, services, interfaces
     - Record major Technology / Design Decisions (ADRs)
 4. Testing plan
 
-## Design
+## Design Development
 
 Gather all shit up to design.
 
