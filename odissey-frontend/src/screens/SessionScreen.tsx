@@ -104,15 +104,9 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       // Use streaming for a better experience
       await sendMessageStream(messageToSend);
     } catch (error) {
-      console.error('Streaming failed, falling back to regular response:', error);
-      // Fallback to non-streaming if streaming fails
-      try {
-        await sendSessionMessage(messageToSend);
-      } catch (fallbackError) {
-        console.error('Both streaming and regular messaging failed:', fallbackError);
-        // Restore input text if both methods fail
-        setInputText(messageToSend);
-      }
+      console.error('Streaming and all fallbacks failed:', error);
+      // Restore input text if all methods fail
+      setInputText(messageToSend);
     }
   };
 

@@ -185,7 +185,15 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       setStreamingMessage('');
       setIsStreaming(false);
       setIsInteracting(false);
-      throw error;
+      
+      // Try fallback to regular message sending
+      console.log('Attempting fallback to regular message sending');
+      try {
+        await sendMessage(message);
+      } catch (fallbackError) {
+        console.error('Both streaming and fallback messaging failed:', fallbackError);
+        throw fallbackError;
+      }
     }
   };
 

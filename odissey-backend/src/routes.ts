@@ -15,7 +15,7 @@ import {
 } from './utils';
 import { DatabaseService } from './database';
 import { StoryService } from './storyService';
-import { AIServiceManager, HuggingFaceProvider, LocalFallbackProvider, AIModality } from './ai';
+import { AIServiceManager, HuggingFaceProvider, LocalFallbackProvider, GeminiProvider, AIModality } from './ai';
 import { 
   CreateAnonymousTokenResponse,
   CreatePersonalizedSessionRequest,
@@ -39,32 +39,40 @@ export class ApiRouter {
     // Initialize AI service
     this.aiService = new AIServiceManager();
     
-    // Register AI providers based on available API keys
+    // Register AI providers in priority order (first registered becomes default)
+    // 1. Gemini (primary - best streaming support and quality)
+    if (env.GEMINI_API_KEY) {
+      const geminiProvider = new GeminiProvider({
+        apiKey: env.GEMINI_API_KEY,
+        model: 'gemini-1.5-flash'
+      });
+      this.aiService.registerProvider(geminiProvider);
+      console.log('Registered Gemini AI provider with 1.5-flash model as primary');
+    } else {
+      console.warn('No Gemini API key provided - this is the recommended primary provider');
+    }
+    
+    // 2. HuggingFace (secondary - good for fallback)
     if (env.HUGGINGFACE_API_KEY && env.HUGGINGFACE_API_KEY.startsWith('hf_')) {
       const huggingFaceProvider = new HuggingFaceProvider({
         apiKey: env.HUGGINGFACE_API_KEY,
         model: 'mistralai/Mistral-7B-Instruct-v0.3'
       });
       this.aiService.registerProvider(huggingFaceProvider);
-      console.log('Registered HuggingFace AI provider with Mistral-7B model');
+      console.log('Registered HuggingFace AI provider with Mistral-7B model as secondary');
     } else {
       console.warn('No valid HuggingFace API key provided');
     }
     
-    // Always register the local fallback provider as backup
+    // 3. Local fallback (always available as final backup)
     const fallbackProvider = new LocalFallbackProvider();
     this.aiService.registerProvider(fallbackProvider);
-    console.log('Registered Local Fallback AI provider as backup');
+    console.log('Registered Local Fallback AI provider as final backup');
     
     // Add other providers if their API keys are available
     if (env.OPENAI_API_KEY) {
       // OpenAI provider can be added here when implemented
       console.log('OpenAI API key detected but provider not yet implemented');
-    }
-    
-    if (env.GEMINI_API_KEY) {
-      // Gemini provider can be added here when implemented  
-      console.log('Gemini API key detected but provider not yet implemented');
     }
     
     this.storyService = new StoryService(this.aiService);
@@ -517,17 +525,26 @@ export class ApiRouter {
       const completeData = JSON.stringify({ type: 'complete', content: narratorResponse }) + '\n';
       await writer.write(encoder.encode(completeData));
 
-      // Save narrator response
+      // Save narrator response immediately
       await this.db.createMessage(sessionId, 'narrator', narratorResponse);
 
-      // Update world state using AI
-      const updatedWorldState = await this.storyService.updateWorldState(
-        session.world_state || world.initial_state || '',
-        userMessage,
-        narratorResponse
-      );
-
-      await this.db.updateSessionState(sessionId, updatedWorldState);
+      // Update world state in background (don't block streaming response)
+      // This reduces the number of API calls during streaming
+      setTimeout(async () => {
+        try {
+          const updatedWorldState = await this.storyService.updateWorldState(
+            session.world_state || world.initial_state || '',
+            userMessage,
+            narratorResponse
+          );
+          await this.db.updateSessionState(sessionId, updatedWorldState);
+        } catch (error) {
+          console.warn('Background world state update failed:', error);
+          // Fallback to simple state update
+          const simpleState = `${session.world_state || world.initial_state || ''}\n\nRecent: "${userMessage}" -> ${narratorResponse.substring(0, 100)}...`;
+          await this.db.updateSessionState(sessionId, simpleState);
+        }
+      }, 0);
 
     } catch (error) {
       console.error('Error in streaming response:', error);
