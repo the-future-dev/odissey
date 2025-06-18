@@ -32,6 +32,11 @@ export const interactWithStory = async (token: string, sessionId: string, messag
   return handleResponse(response);
 };
 
+// Detect if we're running on React Native
+const isReactNative = () => {
+  return typeof navigator !== 'undefined' && navigator.product === 'ReactNative';
+};
+
 export const interactWithStoryStream = async (
   token: string, 
   sessionId: string, 
@@ -40,6 +45,88 @@ export const interactWithStoryStream = async (
   onComplete: (fullResponse: string) => void,
   onError: (error: string) => void
 ): Promise<void> => {
+  // React Native doesn't support ReadableStream API consistently
+  // Use XMLHttpRequest for proper streaming in React Native
+  if (isReactNative()) {
+    console.log('Using XMLHttpRequest streaming for React Native');
+    
+    return new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_URL}/sessions/${sessionId}/interact-stream`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      
+      let lastProcessedLength = 0;
+      let fullResponse = '';
+      
+      xhr.onreadystatechange = () => {
+        if (xhr.readyState === XMLHttpRequest.LOADING || xhr.readyState === XMLHttpRequest.DONE) {
+          // Process new data since last check
+          const newData = xhr.responseText.slice(lastProcessedLength);
+          lastProcessedLength = xhr.responseText.length;
+          
+          if (newData) {
+            // Split by lines and process each complete line
+            const lines = newData.split('\n');
+            
+            for (const line of lines) {
+              if (line.trim()) {
+                try {
+                  const data = JSON.parse(line);
+                  
+                  if (data.type === 'chunk') {
+                    fullResponse += data.content;
+                    onChunk(data.content);
+                  } else if (data.type === 'complete') {
+                    onComplete(data.content);
+                    resolve();
+                    return;
+                  } else if (data.type === 'error') {
+                    onError(data.content);
+                    resolve();
+                    return;
+                  }
+                } catch (parseError) {
+                  // Ignore parsing errors for incomplete lines
+                  if (line.includes('"type":')) {
+                    console.warn('Failed to parse streaming data:', line, parseError);
+                  }
+                }
+              }
+            }
+          }
+        }
+        
+        if (xhr.readyState === XMLHttpRequest.DONE) {
+          if (xhr.status === 200) {
+            // If we didn't get a complete signal but have content, use it
+            if (fullResponse && !xhr.responseText.includes('"type":"complete"')) {
+              onComplete(fullResponse);
+            }
+            resolve();
+          } else {
+            onError(`HTTP ${xhr.status}: ${xhr.statusText}`);
+            reject(new Error(`HTTP ${xhr.status}: ${xhr.statusText}`));
+          }
+        }
+      };
+      
+      xhr.onerror = () => {
+        onError('Network error during streaming');
+        reject(new Error('Network error during streaming'));
+      };
+      
+      xhr.ontimeout = () => {
+        onError('Streaming request timed out');
+        reject(new Error('Streaming request timed out'));
+      };
+      
+      xhr.timeout = 30000; // 30 second timeout
+      xhr.send(JSON.stringify({ message }));
+    });
+  }
+
+  // Web browser - use ReadableStream API with fetch
   try {
     const response = await fetch(`${API_URL}/sessions/${sessionId}/interact-stream`, {
       method: 'POST',
@@ -54,8 +141,8 @@ export const interactWithStoryStream = async (
       throw new ApiError('Failed to interact with story stream', response.status);
     }
 
-    if (!response.body) {
-      throw new Error('No response body for streaming');
+    if (!response.body || !response.body.getReader) {
+      throw new Error('ReadableStream not supported');
     }
 
     const reader = response.body.getReader();

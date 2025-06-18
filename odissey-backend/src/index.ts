@@ -18,6 +18,27 @@ import { ApiRouter } from './routes';
 import { handleCorsPreflightRequest, corsHeaders } from './utils';
 import { Env } from './types';
 
+// Global router cache to avoid recreating for every request
+let cachedRouter: ApiRouter | null = null;
+let cacheKey: string | null = null;
+
+function getCachedRouter(env: Env): ApiRouter {
+	// Create a cache key based on environment variables that matter
+	const currentCacheKey = `${env.GEMINI_API_KEY || ''}_${env.HUGGINGFACE_API_KEY || ''}_${env.OPENAI_API_KEY || ''}`;
+	
+	// Return cached router if env hasn't changed
+	if (cachedRouter && cacheKey === currentCacheKey) {
+		return cachedRouter;
+	}
+	
+	// Create new router and cache it
+	console.log('Initializing ApiRouter (environment changed or first load)');
+	cachedRouter = new ApiRouter(env);
+	cacheKey = currentCacheKey;
+	
+	return cachedRouter;
+}
+
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		// Handle CORS preflight requests first
@@ -34,8 +55,8 @@ export default {
 		}
 
 		try {
-			// Initialize API router
-			const router = new ApiRouter(env);
+			// Get cached router (only creates new one if needed)
+			const router = getCachedRouter(env);
 			
 			// Route the request
 			const response = await router.route(request);

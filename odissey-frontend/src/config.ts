@@ -7,21 +7,25 @@ const configs = {
     // For Android emulator, use: 'http://10.0.2.2:8787'
   },
   production: {
-    apiUrl: 'https://backend-api.andre-ritossa.workers.dev',
+    apiUrl: 'https://odissey-backend.andre-ritossa.workers.dev',
   }
 };
 
-// Simple way to switch environments - change this line:
-// Set to 'development' for local testing, 'production' for deployed backend
-const ENVIRONMENT: 'development' | 'production' = 'development';
+// Auto-detect environment or manually override
+const isDevEnvironment = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV === 'development';
 
-// Or use __DEV__ if you prefer:
-// const ENVIRONMENT = __DEV__ ? 'development' : 'production';
+// Manual override - set this to force a specific environment
+// null = auto-detect, 'development' = local backend, 'production' = deployed backend
+const MANUAL_ENVIRONMENT: 'development' | 'production' | null = 'production';
+
+const ENVIRONMENT: 'development' | 'production' = MANUAL_ENVIRONMENT || (isDevEnvironment ? 'development' : 'production');
 
 export const API_URL = configs[ENVIRONMENT].apiUrl;
 
 // Easy toggle function for testing
 export const setDevelopmentMode = () => {
-  // This would require a restart, but useful for quick switching
+  console.log('Current environment:', ENVIRONMENT);
   console.log('Current API URL:', API_URL);
+  console.log('To use local backend, set MANUAL_ENVIRONMENT to "development" in src/config.ts');
+  console.log('To use production backend, set MANUAL_ENVIRONMENT to "production" in src/config.ts');
 }; 

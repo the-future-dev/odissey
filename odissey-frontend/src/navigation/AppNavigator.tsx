@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 
 import { SessionScreen } from '../screens/SessionScreen';
+import { WorldSelectionScreen } from '../screens/WorldSelectionScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -11,7 +12,8 @@ export const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="Session" component={SessionScreen} initialParams={{ worldId: '1', worldTitle: 'World 1' }} />
+        <Stack.Screen name="WorldSelection" component={WorldSelectionScreen} />
+        <Stack.Screen name="Session" component={SessionScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

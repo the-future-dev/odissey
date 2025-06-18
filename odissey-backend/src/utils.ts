@@ -8,6 +8,72 @@ export const corsHeaders = {
   'Access-Control-Max-Age': '86400', // 24 hours
 };
 
+// Comprehensive logging utilities
+export interface LogContext {
+  sessionId?: string;
+  userId?: number;
+  operation?: string;
+  component?: string;
+  duration?: number;
+  metadata?: Record<string, any>;
+}
+
+export class Logger {
+  private static formatTimestamp(): string {
+    return new Date().toISOString();
+  }
+
+  private static formatMessage(level: string, message: string, context?: LogContext): string {
+    const timestamp = this.formatTimestamp();
+    const sessionId = context?.sessionId ? `[${context.sessionId.substring(0, 8)}...]` : '';
+    const component = context?.component ? `[${context.component}]` : '';
+    const operation = context?.operation ? `[${context.operation}]` : '';
+    const duration = context?.duration ? `(${context.duration}ms)` : '';
+    
+    let logLine = `${timestamp} ${level} ${component}${operation}${sessionId} ${message} ${duration}`;
+    
+    if (context?.metadata && Object.keys(context.metadata).length > 0) {
+      logLine += ` | ${JSON.stringify(context.metadata)}`;
+    }
+    
+    return logLine.trim();
+  }
+
+  static info(message: string, context?: LogContext): void {
+    console.log(this.formatMessage('INFO', message, context));
+  }
+
+  static warn(message: string, context?: LogContext): void {
+    console.warn(this.formatMessage('WARN', message, context));
+  }
+
+  static error(message: string, error?: any, context?: LogContext): void {
+    const errorDetails = error ? ` - ${error.message || error}` : '';
+    console.error(this.formatMessage('ERROR', message + errorDetails, context));
+    if (error?.stack) {
+      console.error(error.stack);
+    }
+  }
+
+  static debug(message: string, context?: LogContext): void {
+    console.log(this.formatMessage('DEBUG', message, context));
+  }
+
+  static timing(operation: string, startTime: number, context?: LogContext): void {
+    const duration = Date.now() - startTime;
+    this.info(`${operation} completed`, { ...context, duration });
+  }
+}
+
+// Performance timing utilities
+export function createTimer(): number {
+  return Date.now();
+}
+
+export function getElapsed(startTime: number): number {
+  return Date.now() - startTime;
+}
+
 /**
  * Generate a secure random token for anonymous authentication
  */
@@ -118,10 +184,45 @@ export function calculateTokenExpiration(daysFromNow: number = 30): Date {
 }
 
 /**
- * Log request information for debugging
+ * Log request information for debugging (optimized to reduce noise)
  */
 export function logRequest(request: Request, info: string = ''): void {
-  console.log(`${request.method} ${request.url} ${info}`);
+  const url = new URL(request.url);
+  const pathname = url.pathname;
+  
+  // Skip logging for health checks and very frequent requests
+  const skipLogging = [
+    '/health',
+    '/auth/validate'
+  ];
+  
+  if (skipLogging.some(path => pathname === path)) {
+    return; // Don't log these frequent requests
+  }
+  
+  // Log only the essential info for most requests
+  const method = request.method;
+  const shortPath = pathname.length > 50 ? pathname.substring(0, 47) + '...' : pathname;
+  
+  // Special handling for session interactions (just show session ID pattern)
+  if (pathname.includes('/interact')) {
+    const sessionMatch = pathname.match(/\/sessions\/([^\/]+)\//);
+    if (sessionMatch) {
+      const sessionId = sessionMatch[1];
+      const shortSessionId = sessionId.substring(0, 8) + '...';
+      Logger.info(`${method} /sessions/${shortSessionId}/interact${pathname.includes('stream') ? '-stream' : ''} ${info}`, {
+        component: 'API',
+        operation: 'REQUEST',
+        sessionId: sessionId
+      });
+      return;
+    }
+  }
+  
+  Logger.info(`${method} ${shortPath} ${info}`.trim(), {
+    component: 'API',
+    operation: 'REQUEST'
+  });
 }
 
 /**

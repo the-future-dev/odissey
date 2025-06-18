@@ -94,6 +94,7 @@ export type RootStackParamList = {
   // WorldGallery: undefined;
   // WorldCreation: undefined;
   // CoCreation: { initialConcept?: string };
+  WorldSelection: undefined;
   Session: { worldId: string; worldTitle?: string };
   // Profile: undefined;
 };

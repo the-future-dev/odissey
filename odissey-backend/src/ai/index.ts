@@ -11,4 +11,4 @@ export { OpenAIProvider } from './providers/openai';
 export type { OpenAIConfig } from './providers/openai';
 export { GeminiProvider } from './providers/gemini';
 export type { GeminiConfig } from './providers/gemini';
-export { LocalFallbackProvider } from './providers/localFallback'; 
+export { LocalFallbackProvider } from './providers/localFallback';

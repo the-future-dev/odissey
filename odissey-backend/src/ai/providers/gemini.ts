@@ -192,14 +192,20 @@ export class GeminiProvider implements AIProvider {
                   
                   if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
                     const textChunk = data.candidates[0].content.parts[0].text;
-                    fullContent += textChunk;
                     
-                    if (request.onChunk) {
-                      request.onChunk(textChunk);
+                    // Clean up potential streaming artifacts
+                    const cleanedChunk = textChunk.replace(/replacesWith/g, '').trim();
+                    
+                    if (cleanedChunk) {
+                      fullContent += cleanedChunk;
+                      
+                      if (request.onChunk) {
+                        request.onChunk(cleanedChunk);
+                      }
                     }
                   }
                 } catch (parseError) {
-                  console.warn('Failed to parse streaming JSON:', parseError);
+                  console.warn('Failed to parse streaming JSON:', parseError, 'Data:', jsonData);
                 }
               }
             }

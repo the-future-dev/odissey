@@ -6,6 +6,11 @@ import { useSession } from '../contexts/SessionContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Session'>;
 
+interface ParsedOption {
+  number: number;
+  text: string;
+}
+
 export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   const { worldId, worldTitle } = route.params;
   const { 
@@ -20,9 +25,57 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     sendMessageStream 
   } = useSession();
   const [inputText, setInputText] = useState('');
+  const [availableOptions, setAvailableOptions] = useState<ParsedOption[]>([]);
   const cursorOpacity = useRef(new Animated.Value(1)).current;
   const dotsOpacity = useRef(new Animated.Value(0.3)).current;
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Parse options from the latest narrator message
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && lastMessage.type === 'narrator') {
+      const options = parseOptionsFromText(lastMessage.text);
+      setAvailableOptions(options);
+    } else if (isStreaming && streamingMessage) {
+      const options = parseOptionsFromText(streamingMessage);
+      setAvailableOptions(options);
+    }
+  }, [messages, streamingMessage]);
+
+  const parseOptionsFromText = (text: string): ParsedOption[] => {
+    const lines = text.split('\n');
+    const options: ParsedOption[] = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Match patterns like "1) Some text" or "1. Some text" or "1 - Some text"
+      const match = trimmed.match(/^(\d+)[\)\.\-\s]+(.+)$/);
+      if (match) {
+        const number = parseInt(match[1]);
+        const text = match[2].trim();
+        if (number >= 1 && number <= 10 && text.length > 0) { // Support up to 10 options
+          options.push({ number, text });
+        }
+      }
+    }
+    
+    return options;
+  };
+
+  const handleOptionSelect = (option: ParsedOption) => {
+    // Set the input to show the selected option
+    setInputText(`${option.number}) ${option.text}`);
+  };
+
+  const handleQuickSend = async (optionText: string) => {
+    if (isInteracting) return;
+
+    try {
+      await sendMessageStream(optionText);
+    } catch (error) {
+      console.error('Failed to send option:', error);
+    }
+  };
 
   useEffect(() => {
     // Only start a new session if we don't have a current session
@@ -91,6 +144,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       await startSession(worldId);
     } catch (error) {
       console.error('Failed to create session:', error);
+      // You could add a user-friendly error state here
     }
   };
 
@@ -114,6 +168,27 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     return (
       <View style={[styles.container, styles.centered]}>
         <Text>Starting your adventure...</Text>
+      </View>
+    );
+  }
+
+  // Add error state if session failed to load
+  if (!currentSession) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <Text style={styles.errorText}>Failed to start adventure</Text>
+        <TouchableOpacity 
+          style={styles.errorButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.errorButtonText}>← Back to Worlds</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.retryButton} 
+          onPress={initializeSession}
+        >
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -167,6 +242,24 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
             </View>
           </View>
         )}
+
+        {/* Show option buttons when available */}
+        {availableOptions.length > 0 && !isInteracting && (
+          <View style={styles.optionsContainer}>
+            <Text style={styles.optionsTitle}>Quick Actions:</Text>
+            {availableOptions.map((option) => (
+              <TouchableOpacity
+                key={option.number}
+                style={styles.optionButton}
+                onPress={() => handleQuickSend(`${option.number}) ${option.text}`)}
+              >
+                <Text style={styles.optionNumber}>{option.number}</Text>
+                <Text style={styles.optionText}>{option.text}</Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={styles.optionsHint}>Or type your own response below</Text>
+          </View>
+        )}
       </ScrollView>
 
       <View style={styles.inputContainer}>
@@ -174,7 +267,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
           style={styles.textInput}
           value={inputText}
           onChangeText={setInputText}
-          placeholder="What do you do next?"
+          placeholder="Choose an option above or type your own action..."
           multiline
           onSubmitEditing={handleSendMessage}
         />
@@ -304,5 +397,86 @@ const styles = StyleSheet.create({
   thinkingTextContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  errorButton: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  errorButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  retryButton: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: '600',
+  },
+  optionsContainer: {
+    padding: 16,
+    backgroundColor: '#F8F9FF',
+    borderRadius: 12,
+    margin: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  optionButton: {
+    flexDirection: 'row',
+    padding: 12,
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    marginBottom: 8,
+    alignItems: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  optionNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#8B5CF6',
+    marginRight: 8,
+    minWidth: 20,
+  },
+  optionText: {
+    fontSize: 16,
+    color: '#1E293B',
+    flex: 1,
+    lineHeight: 22,
+  },
+  optionsHint: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
 }); 

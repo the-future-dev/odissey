@@ -21,7 +21,6 @@ import {
   CreatePersonalizedSessionRequest,
   CreatePersonalizedSessionResponse,
   InteractWithStoryRequest,
-  InteractWithStoryResponse,
   Env,
   Session,
   World,
@@ -39,43 +38,35 @@ export class ApiRouter {
     // Initialize AI service
     this.aiService = new AIServiceManager();
     
-    // Register AI providers in priority order (first registered becomes default)
-    // 1. Gemini (primary - best streaming support and quality)
+    const registeredProviders: string[] = [];
+    
+    // Register AI providers in priority order
     if (env.GEMINI_API_KEY) {
       const geminiProvider = new GeminiProvider({
         apiKey: env.GEMINI_API_KEY,
         model: 'gemini-1.5-flash'
       });
       this.aiService.registerProvider(geminiProvider);
-      console.log('Registered Gemini AI provider with 1.5-flash model as primary');
-    } else {
-      console.warn('No Gemini API key provided - this is the recommended primary provider');
+      registeredProviders.push('Gemini (primary)');
     }
     
-    // 2. HuggingFace (secondary - good for fallback)
     if (env.HUGGINGFACE_API_KEY && env.HUGGINGFACE_API_KEY.startsWith('hf_')) {
       const huggingFaceProvider = new HuggingFaceProvider({
         apiKey: env.HUGGINGFACE_API_KEY,
         model: 'mistralai/Mistral-7B-Instruct-v0.3'
       });
       this.aiService.registerProvider(huggingFaceProvider);
-      console.log('Registered HuggingFace AI provider with Mistral-7B model as secondary');
-    } else {
-      console.warn('No valid HuggingFace API key provided');
+      registeredProviders.push('HuggingFace (secondary)');
     }
     
-    // 3. Local fallback (always available as final backup)
+    // Local fallback always available
     const fallbackProvider = new LocalFallbackProvider();
     this.aiService.registerProvider(fallbackProvider);
-    console.log('Registered Local Fallback AI provider as final backup');
+    registeredProviders.push('LocalFallback (backup)');
     
-    // Add other providers if their API keys are available
-    if (env.OPENAI_API_KEY) {
-      // OpenAI provider can be added here when implemented
-      console.log('OpenAI API key detected but provider not yet implemented');
-    }
+    console.log(`AI providers registered: ${registeredProviders.join(', ')}`);
     
-    this.storyService = new StoryService(this.aiService);
+    this.storyService = new StoryService(this.aiService, this.db);
   }
 
   async route(request: Request): Promise<Response> {
@@ -104,13 +95,6 @@ export class ApiRouter {
         return await this.createPersonalizedSession(request);
       }
 
-      // Session interaction routes (dynamic path)
-      const sessionInteractMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact$/);
-      if (sessionInteractMatch && method === 'POST') {
-        const sessionId = sessionInteractMatch[1];
-        return await this.interactWithStory(request, sessionId);
-      }
-
       // Streaming session interaction routes
       const sessionStreamMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact-stream$/);
       if (sessionStreamMatch && method === 'POST') {
@@ -123,7 +107,6 @@ export class ApiRouter {
         return await this.getWorlds(request);
       }
 
-      // World details route
       const worldMatch = pathname.match(/^\/worlds\/([^\/]+)$/);
       if (worldMatch && method === 'GET') {
         const worldId = worldMatch[1];
@@ -140,38 +123,19 @@ export class ApiRouter {
         return await this.getAIStatus(request);
       }
 
-      // Route not found
       return createErrorResponse('Route not found', 404, 'Not Found');
 
     } catch (error) {
       console.error('Route handler error:', error);
-      
-      // Create error response with proper CORS headers
-      const errorResponse = createErrorResponse(
-        'Internal server error',
-        500,
-        'Internal Server Error'
-      );
-      
-      // Ensure CORS headers are present
-      const headers = new Headers(errorResponse.headers);
-      headers.set('Access-Control-Allow-Origin', '*');
-      headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      
-      return new Response(errorResponse.body, {
-        status: errorResponse.status,
-        statusText: errorResponse.statusText,
-        headers: headers,
-      });
+      return createErrorResponse('Internal server error', 500, 'Internal Server Error');
     }
   }
 
-  // Authentication endpoints
+  // Authentication endpoints (unchanged)
   private async createAnonymousToken(request: Request): Promise<Response> {
     try {
       const token = generateToken();
-      const expiresAt = calculateTokenExpiration(30); // 30 days
+      const expiresAt = calculateTokenExpiration(30);
 
       const user = await this.db.createAnonymousUser(token, expiresAt);
 
@@ -209,10 +173,9 @@ export class ApiRouter {
     }
   }
 
-  // Session endpoints
+  // Session endpoints (simplified)
   private async createAnonymousSession(request: Request): Promise<Response> {
     try {
-      // Authenticate user
       const authHeader = request.headers.get('Authorization');
       const token = extractBearerToken(authHeader);
 
@@ -225,10 +188,8 @@ export class ApiRouter {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
       }
 
-      // Parse request body
       const body = await parseJsonBody<CreatePersonalizedSessionRequest>(request);
 
-      // Validate request
       const validationError = validateRequiredFields(body, ['worldId']);
       if (validationError) {
         return createErrorResponse(validationError, 400);
@@ -238,13 +199,11 @@ export class ApiRouter {
         return createErrorResponse('Invalid world ID format', 400);
       }
 
-      // Get world details
       const world = await this.db.getWorldById(body.worldId);
       if (!world) {
         return createErrorResponse('World not found', 404, 'Not Found');
       }
 
-      // Create session
       const sessionId = generateSessionId();
       const worldState = world.initial_state || 'Your adventure begins...';
 
@@ -266,7 +225,6 @@ export class ApiRouter {
 
   private async createPersonalizedSession(request: Request): Promise<Response> {
     try {
-      // Authenticate user
       const authHeader = request.headers.get('Authorization');
       const token = extractBearerToken(authHeader);
 
@@ -279,10 +237,8 @@ export class ApiRouter {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
       }
 
-      // Parse request body
       const body = await parseJsonBody<CreatePersonalizedSessionRequest>(request);
 
-      // Validate request
       const validationError = validateRequiredFields(body, ['worldId']);
       if (validationError) {
         return createErrorResponse(validationError, 400);
@@ -292,13 +248,11 @@ export class ApiRouter {
         return createErrorResponse('Invalid world ID format', 400);
       }
 
-      // Get world details
       const world = await this.db.getWorldById(body.worldId);
       if (!world) {
         return createErrorResponse('World not found', 404, 'Not Found');
       }
 
-      // Create session
       const sessionId = generateSessionId();
       const worldState = world.initial_state || 'Your adventure begins...';
 
@@ -318,108 +272,13 @@ export class ApiRouter {
     }
   }
 
-  private async interactWithStory(request: Request, sessionId: string): Promise<Response> {
-    try {
-      // Validate session ID format
-      if (!isValidSessionId(sessionId)) {
-        return createErrorResponse('Invalid session ID format', 400);
-      }
-
-      // Authenticate user
-      const authHeader = request.headers.get('Authorization');
-      const token = extractBearerToken(authHeader);
-
-      if (!token) {
-        return createErrorResponse('Missing authorization header', 401, 'Unauthorized');
-      }
-
-      const user = await this.db.getUserByToken(token);
-      if (!user) {
-        return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
-      }
-
-      // Parse request body
-      const body = await parseJsonBody<InteractWithStoryRequest>(request);
-
-      // Validate request
-      const validationError = validateRequiredFields(body, ['message']);
-      if (validationError) {
-        return createErrorResponse(validationError, 400);
-      }
-
-      // Sanitize user input
-      const userMessage = sanitizeInput(body.message);
-      if (!userMessage) {
-        return createErrorResponse('Message cannot be empty', 400);
-      }
-
-      // Get session and verify ownership
-      const session = await this.db.getSessionWithUser(sessionId, user.id);
-      if (!session) {
-        return createErrorResponse('Session not found or access denied', 404, 'Not Found');
-      }
-
-      // Get world details
-      const world = await this.db.getWorldById(session.world_id);
-      if (!world) {
-        return createErrorResponse('World not found', 404, 'Not Found');
-      }
-
-      // Save user message
-      await this.db.createMessage(sessionId, 'user', userMessage);
-
-      // Get recent conversation context
-      const recentMessages = await this.db.getRecentSessionMessages(sessionId, 10);
-
-      // Generate AI response
-      const narratorResponse = await this.storyService.generateResponse(
-        userMessage,
-        session,
-        world,
-        recentMessages
-      );
-
-      // Save narrator response
-      await this.db.createMessage(sessionId, 'narrator', narratorResponse);
-
-      // Update world state using AI
-      const updatedWorldState = await this.storyService.updateWorldState(
-        session.world_state || world.initial_state || '',
-        userMessage,
-        narratorResponse
-      );
-
-      await this.db.updateSessionState(sessionId, updatedWorldState);
-
-      const response: InteractWithStoryResponse = {
-        response: narratorResponse
-      };
-
-      return createJsonResponse(response);
-    } catch (error) {
-      console.error('Error in story interaction:', error);
-      
-      // Provide more specific error messages
-      if (error instanceof Error && error.message.includes('Unable to generate story response')) {
-        return createErrorResponse(
-          'The AI storyteller is currently unavailable. Please try again in a moment.',
-          503,
-          'Service Temporarily Unavailable'
-        );
-      }
-      
-      return createErrorResponse('Failed to process story interaction', 500);
-    }
-  }
-
+  // Streaming interaction
   private async interactWithStoryStream(request: Request, sessionId: string): Promise<Response> {
     try {
-      // Validate session ID format
       if (!isValidSessionId(sessionId)) {
         return createErrorResponse('Invalid session ID format', 400);
       }
 
-      // Authenticate user
       const authHeader = request.headers.get('Authorization');
       const token = extractBearerToken(authHeader);
 
@@ -432,28 +291,23 @@ export class ApiRouter {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
       }
 
-      // Parse request body
       const body = await parseJsonBody<InteractWithStoryRequest>(request);
 
-      // Validate request
       const validationError = validateRequiredFields(body, ['message']);
       if (validationError) {
         return createErrorResponse(validationError, 400);
       }
 
-      // Sanitize user input
       const userMessage = sanitizeInput(body.message);
       if (!userMessage) {
         return createErrorResponse('Message cannot be empty', 400);
       }
 
-      // Get session and verify ownership
       const session = await this.db.getSessionWithUser(sessionId, user.id);
       if (!session) {
         return createErrorResponse('Session not found or access denied', 404, 'Not Found');
       }
 
-      // Get world details
       const world = await this.db.getWorldById(session.world_id);
       if (!world) {
         return createErrorResponse('World not found', 404, 'Not Found');
@@ -470,7 +324,7 @@ export class ApiRouter {
       const writer = writable.getWriter();
       const encoder = new TextEncoder();
 
-      // Start streaming response generation immediately (don't await)
+      // Start streaming response generation
       this.handleStreamingGeneration(
         writer, 
         encoder, 
@@ -525,11 +379,10 @@ export class ApiRouter {
       const completeData = JSON.stringify({ type: 'complete', content: narratorResponse }) + '\n';
       await writer.write(encoder.encode(completeData));
 
-      // Save narrator response immediately
+      // Save narrator response
       await this.db.createMessage(sessionId, 'narrator', narratorResponse);
 
-      // Update world state in background (don't block streaming response)
-      // This reduces the number of API calls during streaming
+      // Simple world state update in background
       setTimeout(async () => {
         try {
           const updatedWorldState = await this.storyService.updateWorldState(
@@ -540,9 +393,6 @@ export class ApiRouter {
           await this.db.updateSessionState(sessionId, updatedWorldState);
         } catch (error) {
           console.warn('Background world state update failed:', error);
-          // Fallback to simple state update
-          const simpleState = `${session.world_state || world.initial_state || ''}\n\nRecent: "${userMessage}" -> ${narratorResponse.substring(0, 100)}...`;
-          await this.db.updateSessionState(sessionId, simpleState);
         }
       }, 0);
 
@@ -558,7 +408,7 @@ export class ApiRouter {
     }
   }
 
-  // World endpoints
+  // World endpoints (unchanged)
   private async getWorlds(request: Request): Promise<Response> {
     try {
       const worlds = await this.db.getAllWorlds();
@@ -587,7 +437,6 @@ export class ApiRouter {
     }
   }
 
-  // AI service status endpoint
   private async getAIStatus(request: Request): Promise<Response> {
     try {
       const providers = this.aiService.listProviders();
@@ -601,7 +450,7 @@ export class ApiRouter {
           textToAudio: this.aiService.hasModalitySupport(AIModality.TextToAudio),
           audioToText: this.aiService.hasModalitySupport(AIModality.AudioToText)
         },
-        aiOnly: true, // Indicates we rely entirely on AI, no rule-based fallbacks
+        simplified: true,
         timestamp: new Date().toISOString()
       });
     } catch (error) {

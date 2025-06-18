@@ -176,7 +176,9 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
           setStreamingMessage('');
           setIsStreaming(false);
           setIsInteracting(false);
-          throw new Error(error);
+          
+          // Don't throw here, let the catch block handle fallback
+          console.log('Streaming failed, will attempt fallback');
         }
       );
       
@@ -184,15 +186,36 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       console.error('Failed to send streaming message:', error);
       setStreamingMessage('');
       setIsStreaming(false);
-      setIsInteracting(false);
       
       // Try fallback to regular message sending
       console.log('Attempting fallback to regular message sending');
       try {
-        await sendMessage(message);
+        // Don't call sendMessage recursively, call the API directly
+        const token = await TokenManager.getValidToken();
+        const response = await interactWithStory(token, currentSession.sessionId, message);
+        
+        // Add narrator response
+        const narratorMessage: Message = {
+          type: 'narrator',
+          text: response.response,
+          timestamp: new Date()
+        };
+        
+        const finalMessages = [...messages, {
+          type: 'user' as const,
+          text: message,
+          timestamp: new Date()
+        }, narratorMessage];
+        setMessages(finalMessages);
+        
+        // Persist updated messages
+        await persistMessages(finalMessages);
+        
       } catch (fallbackError) {
         console.error('Both streaming and fallback messaging failed:', fallbackError);
         throw fallbackError;
+      } finally {
+        setIsInteracting(false);
       }
     }
   };
