@@ -21,6 +21,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     isStreaming,
     streamingMessage,
     startSession,
+    resetSession,
     sendMessage: sendSessionMessage,
     sendMessageStream 
   } = useSession();
@@ -164,6 +165,17 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  const handleResetWorld = async () => {
+    if (isInteracting || isStreaming) return;
+
+    try {
+      await resetSession(worldId);
+    } catch (error) {
+      console.error('Failed to reset world:', error);
+      // You could add a user-friendly error state here
+    }
+  };
+
   if (isSessionLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -203,6 +215,15 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{worldTitle || 'Adventure'}</Text>
+        <TouchableOpacity 
+          style={styles.resetButton}
+          onPress={handleResetWorld}
+          disabled={isInteracting || isStreaming}
+        >
+          <Text style={[styles.resetButtonText, (isInteracting || isStreaming) && styles.resetButtonDisabled]}>
+            Reset World
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView 
@@ -297,6 +318,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 20,
     paddingTop: 60,
     backgroundColor: 'white',
@@ -312,6 +334,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#1E293B',
+    flex: 1,
+    textAlign: 'center',
+  },
+  resetButton: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  resetButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  resetButtonDisabled: {
+    color: '#9CA3AF',
   },
   messagesContainer: {
     flex: 1,

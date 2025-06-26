@@ -19,6 +19,7 @@ interface SessionContextType {
   
   // Session management
   startSession: (worldId: string) => Promise<void>;
+  resetSession: (worldId: string) => Promise<void>;
   endSession: () => Promise<void>;
   sendMessage: (message: string) => Promise<void>;
   sendMessageStream: (message: string) => Promise<void>;
@@ -65,6 +66,22 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     } finally {
       setIsSessionLoading(false);
     }
+  };
+
+  const resetSession = async (worldId: string) => {
+    // Clear current session state
+    setCurrentSession(null);
+    setMessages([]);
+    setCoherenceState(null);
+    setStreamingMessage('');
+    setIsStreaming(false);
+    setIsInteracting(false);
+    
+    // Clear persisted session data
+    await clearPersistedSessionData();
+    
+    // Start a new session for the same world
+    await startSession(worldId);
   };
 
   const endSession = async () => {
@@ -124,6 +141,8 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       throw new Error('No active session');
     }
     
+    console.log('SessionContext: Starting streaming message, session:', currentSession.sessionId);
+    
     setIsStreaming(true);
     setStreamingMessage('');
     setIsInteracting(true);
@@ -141,6 +160,8 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const updatedMessages = [...messages, userMessage];
       setMessages(updatedMessages);
       
+      console.log('SessionContext: Starting streaming request');
+      
       // Start streaming response
       await interactWithStoryStream(
         token,
@@ -148,10 +169,13 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         message,
         // onChunk
         (chunk: string) => {
+          console.log('SessionContext: Received chunk, length:', chunk.length);
           setStreamingMessage(prev => prev + chunk);
         },
         // onComplete
         (fullResponse: string) => {
+          console.log('SessionContext: Streaming complete, total response length:', fullResponse.length);
+          
           // Add complete narrator response to messages
           const narratorMessage: Message = {
             type: 'narrator',
@@ -172,51 +196,24 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         },
         // onError
         (error: string) => {
-          console.error('Streaming error:', error);
+          console.error('SessionContext: Streaming error received:', error);
           setStreamingMessage('');
           setIsStreaming(false);
           setIsInteracting(false);
-          
-          // Don't throw here, let the catch block handle fallback
-          console.log('Streaming failed, will attempt fallback');
         }
       );
       
+      console.log('SessionContext: Streaming interaction completed successfully');
+      
     } catch (error) {
-      console.error('Failed to send streaming message:', error);
+      console.error('SessionContext: Failed to send streaming message:', error);
       setStreamingMessage('');
       setIsStreaming(false);
+      setIsInteracting(false);
       
-      // Try fallback to regular message sending
-      console.log('Attempting fallback to regular message sending');
-      try {
-        // Don't call sendMessage recursively, call the API directly
-        const token = await TokenManager.getValidToken();
-        const response = await interactWithStory(token, currentSession.sessionId, message);
-        
-        // Add narrator response
-        const narratorMessage: Message = {
-          type: 'narrator',
-          text: response.response,
-          timestamp: new Date()
-        };
-        
-        const finalMessages = [...messages, {
-          type: 'user' as const,
-          text: message,
-          timestamp: new Date()
-        }, narratorMessage];
-        setMessages(finalMessages);
-        
-        // Persist updated messages
-        await persistMessages(finalMessages);
-        
-      } catch (fallbackError) {
-        console.error('Both streaming and fallback messaging failed:', fallbackError);
-        throw fallbackError;
-      } finally {
-        setIsInteracting(false);
-      }
+      // The SessionApi already handles fallbacks, so we don't need to duplicate that logic here
+      // Just re-throw the error so the UI can handle it appropriately
+      throw error;
     }
   };
 
@@ -328,6 +325,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     isStreaming,
     streamingMessage,
     startSession,
+    resetSession,
     endSession,
     sendMessage,
     sendMessageStream,
