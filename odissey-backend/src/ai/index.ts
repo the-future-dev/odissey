@@ -1,14 +1,11 @@
-// AI interfaces and types
-export * from './interfaces';
+// === AI MODULE EXPORTS (Text-to-Text Only) ===
 
-// AI service manager
+export { AIModality } from './interfaces';
+export type { AIProvider, AIService, TextToTextRequest, TextToTextResponse } from './interfaces';
 export { AIServiceManager } from './aiService';
 
-// AI providers
-export { HuggingFaceProvider } from './providers/huggingface';
-export type { HuggingFaceConfig } from './providers/huggingface';
-export { OpenAIProvider } from './providers/openai';
-export type { OpenAIConfig } from './providers/openai';
+// === PROVIDER EXPORTS ===
 export { GeminiProvider } from './providers/gemini';
 export type { GeminiConfig } from './providers/gemini';
-export { LocalFallbackProvider } from './providers/localFallback';
+export { HuggingFaceProvider } from './providers/huggingface';
+export type { HuggingFaceConfig } from './providers/huggingface';

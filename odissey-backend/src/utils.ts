@@ -1,4 +1,4 @@
-import { ApiError } from './types';
+import { ApiError } from './routes/api-types';
 
 // CORS headers for cross-origin requests
 export const corsHeaders = {

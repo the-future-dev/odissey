@@ -16,7 +16,7 @@
 
 import { ApiRouter } from './routes';
 import { handleCorsPreflightRequest, corsHeaders } from './utils';
-import { Env } from './types';
+import { Env } from './routes';
 
 // Global router cache to avoid recreating for every request
 let cachedRouter: ApiRouter | null = null;

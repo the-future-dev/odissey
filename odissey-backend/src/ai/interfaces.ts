@@ -1,15 +1,12 @@
-// AI Provider interfaces for different modalities
+// === AI Provider INTERFACES ===
+
 export interface TextToTextRequest {
-  messages: Array<{
-    role: 'system' | 'user' | 'assistant';
-    content: string;
-  }>;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   temperature?: number;
   maxTokens?: number;
   stopSequences?: string[];
-  // Streaming support
-  onChunk?: (chunk: string) => void;
   streaming?: boolean;
+  onChunk?: (chunk: string) => void;
 }
 
 export interface TextToTextResponse {
@@ -19,87 +16,40 @@ export interface TextToTextResponse {
     completionTokens: number;
     totalTokens: number;
   };
-  model?: string;
-  finishReason?: string;
 }
 
-export interface TextToAudioRequest {
-  text: string;
-  voice?: string;
-  speed?: number;
-  format?: string;
+// === AI PROVIDER INTERFACES ===
+
+export enum AIModality {
+  TextToText = 'text-to-text'
 }
 
-export interface TextToAudioResponse {
-  audioBuffer: ArrayBuffer;
-  format: string;
-  duration?: number;
-}
-
-export interface AudioToTextRequest {
-  audioBuffer: ArrayBuffer;
-  format: string;
-  language?: string;
-}
-
-export interface AudioToTextResponse {
-  text: string;
-  confidence?: number;
-  language?: string;
-}
-
-// Base AI Provider interface
 export interface AIProvider {
   readonly name: string;
   readonly supportedModalities: AIModality[];
-  
-  // Text-to-Text
-  generateText?(request: TextToTextRequest): Promise<TextToTextResponse>;
-  
-  // Streaming Text-to-Text
-  generateTextStream?(request: TextToTextRequest): Promise<TextToTextResponse>;
-  
-  // Text-to-Audio (TTS)
-  generateAudio?(request: TextToAudioRequest): Promise<TextToAudioResponse>;
-  
-  // Audio-to-Text (STT)
-  transcribeAudio?(request: AudioToTextRequest): Promise<AudioToTextResponse>;
+  generateText(request: TextToTextRequest): Promise<TextToTextResponse>;
 }
 
-export enum AIModality {
-  TextToText = 'text-to-text',
-  TextToAudio = 'text-to-audio',
-  AudioToText = 'audio-to-text'
-}
-
-// AI Service interface for managing providers
 export interface AIService {
   registerProvider(provider: AIProvider): void;
   getProvider(name: string): AIProvider | undefined;
-  getProviderForModality(modality: AIModality): AIProvider | undefined;
-  
-  // Convenience methods that route to appropriate providers
+  setDefaultProvider(name: string): void;
   generateText(request: TextToTextRequest, providerName?: string): Promise<TextToTextResponse>;
-  generateAudio?(request: TextToAudioRequest, providerName?: string): Promise<TextToAudioResponse>;
-  transcribeAudio?(request: AudioToTextRequest, providerName?: string): Promise<AudioToTextResponse>;
+  listProviders(): Array<{ name: string; supportedModalities: AIModality[] }>;
 }
 
-// Error types
+// === ERROR CLASSES ===
+
 export class AIProviderError extends Error {
-  constructor(
-    message: string,
-    public provider: string,
-    public modality: AIModality,
-    public statusCode?: number
-  ) {
+  constructor(message: string, public providerName: string, public originalError?: unknown) {
     super(message);
     this.name = 'AIProviderError';
   }
 }
 
 export class UnsupportedModalityError extends Error {
-  constructor(modality: AIModality, provider: string) {
-    super(`Provider ${provider} does not support ${modality}`);
+  constructor(public modality: AIModality, public providerName: string) {
+    super(`Provider ${providerName} does not support modality: ${modality}`);
     this.name = 'UnsupportedModalityError';
   }
 } 

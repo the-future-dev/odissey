@@ -1,5 +1,9 @@
+.vscode
+
 node_modules
 .wrangler
 
 .env
 .dev.vars
+
+package-lock.json
