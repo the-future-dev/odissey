@@ -44,7 +44,7 @@ export class ApiRouter {
     if (env.GEMINI_API_KEY) {
       const geminiProvider = new GeminiProvider({
         apiKey: env.GEMINI_API_KEY,
-        model: 'gemini-1.5-flash'
+        model: 'gemini-2.5-flash'
       });
       this.aiService.registerProvider(geminiProvider);
       registeredProviders.push('Gemini (primary)');

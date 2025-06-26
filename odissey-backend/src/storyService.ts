@@ -1,7 +1,6 @@
 import { Message, Session, World } from './types';
 import { AIServiceManager } from './ai/aiService';
-import { SystemPromptService } from './story/systemPromptService';
-import { AdaptivePromptService } from './story/adaptivePromptService';
+// import { AdaptivePromptService } from './story/adaptivePromptService';
 import { TextToTextRequest } from './ai/interfaces';
 import { DatabaseService } from './database';
 import { Logger, createTimer, getElapsed } from './utils';
@@ -18,14 +17,12 @@ export interface WorldContext {
 
 export class StoryService {
   private aiService: AIServiceManager;
-  private systemPromptService: SystemPromptService;
-  private adaptivePromptService: AdaptivePromptService;
+  // private adaptivePromptService: AdaptivePromptService;
   private db: DatabaseService;
 
   constructor(aiService: AIServiceManager, db: DatabaseService) {
     this.aiService = aiService;
-    this.adaptivePromptService = new AdaptivePromptService(aiService);
-    this.systemPromptService = new SystemPromptService(this.adaptivePromptService);
+    // this.adaptivePromptService = new AdaptivePromptService(aiService);
     this.db = db;
     
     Logger.info('StoryService initialized (simplified)', {
@@ -78,7 +75,7 @@ export class StoryService {
       // Generate streaming AI response with retry logic
       const aiRequest: TextToTextRequest = {
         messages,
-        temperature: 0.6,
+        temperature: 0.5,
         maxTokens: 500,
         onChunk: onChunk,
         streaming: true
@@ -193,59 +190,78 @@ export class StoryService {
     const { world, characters, locations, items, events, themes, loreEntries } = worldContext;
 
     // Get dynamic system prompt from service
-    const basePrompt = await this.systemPromptService.generateSystemPrompt({
-      world,
-      worldState: world.initial_state || '',
-      recentMessages
-    });
+    const system_prompt = `You are a storyteller guiding the user through an interactive adventure in the world of "${worldContext.world.title}".
 
-    // Build FOCUSED world information (much shorter to avoid overwhelming model)
-    let worldInfo = '\n\n=== KEY WORLD ELEMENTS ===\n\n';
+WORLD DESCRIPTION:
+${worldContext.world.description || 'An interactive adventure world'}
 
-    // Key Characters (limit to 3 most important)
-    if (characters.length > 0) {
-      worldInfo += 'MAIN CHARACTERS:\n';
-      const keyCharacters = characters.slice(0, 3); // Limit to first 3
-      keyCharacters.forEach(char => {
-        worldInfo += `- ${char.name} (${char.role}): ${char.description.substring(0, 100)}...\n`;
-      });
-      worldInfo += '\n';
-    }
+CORE STORYTELLING PRINCIPLES:
 
-    // Key Locations (limit to 4 most important)
-    if (locations.length > 0) {
-      worldInfo += 'KEY LOCATIONS:\n';
-      const keyLocations = locations.slice(0, 4); // Limit to first 4
-      keyLocations.forEach(loc => {
-        worldInfo += `- ${loc.name}: ${loc.description.substring(0, 120)}...\n`;
-      });
-      worldInfo += '\n';
-    }
+NARRATOR IDENTITY & PERSPECTIVE:
+- You are the omniscient narrator speaking directly to the reader as "you"
+- Use simple, clear words and a friendly tone.
+- The user is the protagonist.
 
-    // Important Items (limit to 3)
-    if (items.length > 0) {
-      worldInfo += 'NOTABLE ITEMS:\n';
-      const keyItems = items.slice(0, 3); // Limit to first 3
-      keyItems.forEach(item => {
-        worldInfo += `- ${item.name}: ${item.description.substring(0, 80)}...\n`;
-      });
-      worldInfo += '\n';
-    }
+RESPONSE STRUCTURE REQUIREMENTS:
+- MAXIMUM 200 words per response
+- Structure each response that generally include:
+  1. SCENE SETTING: describe the scene and/or the situation.
+  2. EVENT: Show something happening to get the user interested.
+  3. CHOICES: Give 3 options the user can pick from.
 
-    // Current Themes
-    if (themes.length > 0) {
-      worldInfo += 'STORY THEMES:\n';
-      themes.slice(0, 2).forEach(theme => { // Limit to 2 themes
-        worldInfo += `- ${theme.name}: ${theme.description.substring(0, 100)}...\n`;
-      });
-      worldInfo += '\n';
-    }
+  Use a numbered list with format:
+  1) ... \n
+  2) ... \n
+  3) ... \n
+  `;
 
-    worldInfo += '=== END WORLD ELEMENTS ===\n\n';
+    // // Build FOCUSED world information (much shorter to avoid overwhelming model)
+    // let worldInfo = '\n\n=== KEY WORLD ELEMENTS ===\n\n';
 
-    worldInfo += 'INSTRUCTIONS: Create immersive, narrative responses that reference the world elements naturally. Focus on advancing the story and engaging the player. Keep responses vivid but concise.';
+    // // Key Characters (limit to 3 most important)
+    // if (characters.length > 0) {
+    //   worldInfo += 'MAIN CHARACTERS:\n';
+    //   const keyCharacters = characters.slice(0, 3); // Limit to first 3
+    //   keyCharacters.forEach(char => {
+    //     worldInfo += `- ${char.name} (${char.role}): ${char.description.substring(0, 100)}...\n`;
+    //   });
+    //   worldInfo += '\n';
+    // }
 
-    return basePrompt + worldInfo;
+    // // Key Locations (limit to 4 most important)
+    // if (locations.length > 0) {
+    //   worldInfo += 'KEY LOCATIONS:\n';
+    //   const keyLocations = locations.slice(0, 4); // Limit to first 4
+    //   keyLocations.forEach(loc => {
+    //     worldInfo += `- ${loc.name}: ${loc.description.substring(0, 120)}...\n`;
+    //   });
+    //   worldInfo += '\n';
+    // }
+
+    // // Important Items (limit to 3)
+    // if (items.length > 0) {
+    //   worldInfo += 'NOTABLE ITEMS:\n';
+    //   const keyItems = items.slice(0, 3); // Limit to first 3
+    //   keyItems.forEach(item => {
+    //     worldInfo += `- ${item.name}: ${item.description.substring(0, 80)}...\n`;
+    //   });
+    //   worldInfo += '\n';
+    // }
+
+    // // Current Themes
+    // if (themes.length > 0) {
+    //   worldInfo += 'STORY THEMES:\n';
+    //   themes.slice(0, 2).forEach(theme => { // Limit to 2 themes
+    //     worldInfo += `- ${theme.name}: ${theme.description.substring(0, 100)}...\n`;
+    //   });
+    //   worldInfo += '\n';
+    // }
+
+    // worldInfo += '=== END WORLD ELEMENTS ===\n\n';
+
+    // worldInfo += 'INSTRUCTIONS: Create immersive, narrative responses that reference the world elements naturally. Focus on advancing the story and engaging the player. Keep responses vivid but concise.';
+
+    return system_prompt;
   }
 
   private async generateStreamingWithRetry(
