@@ -39,8 +39,8 @@ export class GeminiProvider implements AIProvider {
       const payload: any = {
         contents,
         generationConfig: {
-          temperature: request.temperature || 0.2,
-          maxOutputTokens: request.maxTokens || 500,
+          temperature: request.temperature,
+          maxOutputTokens: request.maxTokens,
           ...(request.stopSequences && { stopSequences: request.stopSequences })
         }
       };

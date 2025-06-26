@@ -39,8 +39,8 @@ export class HuggingFaceProvider implements AIProvider {
       const payload = {
         inputs: prompt,
         parameters: {
-          temperature: request.temperature || 0.7,
-          max_new_tokens: request.maxTokens || 500,
+          temperature: request.temperature,
+          max_new_tokens: request.maxTokens,
           return_full_text: false,
           ...(request.stopSequences && { stop: request.stopSequences })
         }

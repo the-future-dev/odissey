@@ -56,8 +56,8 @@ export class StoryService {
       // Generate streaming AI response
       const aiRequest: TextToTextRequest = {
         messages,
-        temperature: 0.7,
-        maxTokens: 500,
+        temperature: 0.2,
+        maxTokens: 5000,
         onChunk: onChunk,
         streaming: true
       };
