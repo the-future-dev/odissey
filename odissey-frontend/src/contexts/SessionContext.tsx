@@ -1,17 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SessionData, Message, CoherenceState } from '../types';
-import {  
-  interactWithStory, 
-  interactWithStoryStream,
-  TokenManager,
-  createPersonalizedSession
-} from '../api/SessionApi';
+import { SessionData, Message } from '../types';
+import { TokenManager, createSession, interactWithStoryStream } from '../api';
 
 interface SessionContextType {
   currentSession: SessionData | null;
   messages: Message[];
-  coherenceState: CoherenceState | null;
   isSessionLoading: boolean;
   isInteracting: boolean;
   isStreaming: boolean;
@@ -21,45 +15,52 @@ interface SessionContextType {
   startSession: (worldId: string) => Promise<void>;
   resetSession: (worldId: string) => Promise<void>;
   endSession: () => Promise<void>;
-  sendMessage: (message: string) => Promise<void>;
   sendMessageStream: (message: string) => Promise<void>;
-  
-  // Session state
-  getSessionHistory: () => Message[];
-  saveSessionState: () => Promise<void>;
-  loadSessionState: (sessionId: string) => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
+// Storage keys
+const STORAGE_KEYS = {
+  SESSION: 'odyssey_current_session',
+  MESSAGES: 'odyssey_session_messages',
+} as const;
+
 export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentSession, setCurrentSession] = useState<SessionData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [coherenceState, setCoherenceState] = useState<CoherenceState | null>(null);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
 
-  // Session management
+  // Load persisted session on mount
+  useEffect(() => {
+    loadPersistedSession();
+  }, []);
+
+  // Auto-save session state when it changes
+  useEffect(() => {
+    if (currentSession && messages.length > 0) {
+      saveSessionState();
+    }
+  }, [currentSession, messages]);
+
   const startSession = async (worldId: string) => {
     setIsSessionLoading(true);
     try {
       const token = await TokenManager.getValidToken();
-      const session = await createPersonalizedSession(token, worldId);
+      const session = await createSession(token, worldId);
       
       setCurrentSession(session);
       
-      // Create welcome message
       const welcomeMessage: Message = {
         type: 'narrator',
-        text: session.worldState || 'Welcome to your adventure! What would you like to do?',
+        text: 'Welcome to your adventure! What would you like to do?',
         timestamp: new Date()
       };
       
       setMessages([welcomeMessage]);
-      await persistSessionData(session, [welcomeMessage]);
-      
     } catch (error) {
       console.error('Failed to start session:', error);
       throw error;
@@ -69,79 +70,34 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const resetSession = async (worldId: string) => {
-    // Clear current session state
+    // Clear current state
     setCurrentSession(null);
     setMessages([]);
-    setCoherenceState(null);
     setStreamingMessage('');
     setIsStreaming(false);
     setIsInteracting(false);
     
-    // Clear persisted session data
-    await clearPersistedSessionData();
+    // Clear storage
+    await clearSessionStorage();
     
-    // Start a new session for the same world
+    // Start new session
     await startSession(worldId);
   };
 
   const endSession = async () => {
     setCurrentSession(null);
     setMessages([]);
-    setCoherenceState(null);
+    setStreamingMessage('');
+    setIsStreaming(false);
+    setIsInteracting(false);
     
-    // Clear persisted session data
-    await clearPersistedSessionData();
-  };
-
-  const sendMessage = async (message: string) => {
-    if (!currentSession) {
-      throw new Error('No active session');
-    }
-    
-    setIsInteracting(true);
-    try {
-      const token = await TokenManager.getValidToken();
-      
-      // Add user message immediately
-      const userMessage: Message = {
-        type: 'user',
-        text: message,
-        timestamp: new Date()
-      };
-      
-      const updatedMessages = [...messages, userMessage];
-      setMessages(updatedMessages);
-      
-      // Send to backend and get response
-      const response = await interactWithStory(token, currentSession.sessionId, message);
-      
-      // Add narrator response
-      const narratorMessage: Message = {
-        type: 'narrator',
-        text: response.response,
-        timestamp: new Date()
-      };
-      
-      const finalMessages = [...updatedMessages, narratorMessage];
-      setMessages(finalMessages);
-      
-      // Persist updated messages
-      await persistMessages(finalMessages);
-      
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      throw error;
-    } finally {
-      setIsInteracting(false);
-    }
+    await clearSessionStorage();
   };
 
   const sendMessageStream = async (message: string) => {
     if (!currentSession) {
       throw new Error('No active session');
     }
-    
-    console.log('SessionContext: Starting streaming message, session:', currentSession.sessionId);
     
     setIsStreaming(true);
     setStreamingMessage('');
@@ -160,8 +116,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const updatedMessages = [...messages, userMessage];
       setMessages(updatedMessages);
       
-      console.log('SessionContext: Starting streaming request');
-      
       // Start streaming response
       await interactWithStoryStream(
         token,
@@ -169,14 +123,10 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
         message,
         // onChunk
         (chunk: string) => {
-          console.log('SessionContext: Received chunk, length:', chunk.length);
           setStreamingMessage(prev => prev + chunk);
         },
         // onComplete
         (fullResponse: string) => {
-          console.log('SessionContext: Streaming complete, total response length:', fullResponse.length);
-          
-          // Add complete narrator response to messages
           const narratorMessage: Message = {
             type: 'narrator',
             text: fullResponse,
@@ -190,136 +140,77 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
           setStreamingMessage('');
           setIsStreaming(false);
           setIsInteracting(false);
-          
-          // Persist updated messages
-          persistMessages(finalMessages);
         },
         // onError
         (error: string) => {
-          console.error('SessionContext: Streaming error received:', error);
+          console.error('Streaming error:', error);
           setStreamingMessage('');
           setIsStreaming(false);
           setIsInteracting(false);
+          throw new Error(error);
         }
       );
       
-      console.log('SessionContext: Streaming interaction completed successfully');
-      
     } catch (error) {
-      console.error('SessionContext: Failed to send streaming message:', error);
+      console.error('Failed to send streaming message:', error);
       setStreamingMessage('');
       setIsStreaming(false);
       setIsInteracting(false);
-      
-      // The SessionApi already handles fallbacks, so we don't need to duplicate that logic here
-      // Just re-throw the error so the UI can handle it appropriately
       throw error;
     }
   };
 
-  // Utility functions for state management
-  const getSessionHistory = (): Message[] => {
-    return messages;
-  };
-
+  // Storage helpers
   const saveSessionState = async () => {
-    if (currentSession && messages.length > 0) {
-      await persistSessionData(currentSession, messages);
+    try {
+      if (currentSession) {
+        await AsyncStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentSession));
+      }
+      if (messages.length > 0) {
+        await AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
+      }
+    } catch (error) {
+      console.error('Failed to save session state:', error);
     }
   };
 
-  const loadSessionState = async (sessionId: string) => {
+  const loadPersistedSession = async () => {
     try {
-      const { session, sessionMessages } = await getPersistedSessionData();
+      const [sessionData, messagesData] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEYS.SESSION),
+        AsyncStorage.getItem(STORAGE_KEYS.MESSAGES)
+      ]);
       
-      if (session && sessionMessages && session.sessionId === sessionId) {
-        setCurrentSession(session);
-        setMessages(sessionMessages.map((msg: any) => ({
+      if (sessionData) {
+        setCurrentSession(JSON.parse(sessionData));
+      }
+      
+      if (messagesData) {
+        const parsedMessages = JSON.parse(messagesData);
+        setMessages(parsedMessages.map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp)
         })));
       }
     } catch (error) {
-      console.error('Failed to load session state:', error);
+      console.error('Failed to load persisted session:', error);
     }
   };
 
-  // Private helper functions for data persistence
-  const persistSessionData = async (session: SessionData, sessionMessages: Message[]) => {
+  const clearSessionStorage = async () => {
     try {
-      await AsyncStorage.setItem('odyssey_current_session', JSON.stringify(session));
-      await AsyncStorage.setItem('odyssey_session_messages', JSON.stringify(sessionMessages));
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.SESSION),
+        AsyncStorage.removeItem(STORAGE_KEYS.MESSAGES)
+      ]);
     } catch (error) {
-      console.error('Failed to persist session data:', error);
+      console.error('Failed to clear session storage:', error);
     }
   };
-
-  const persistMessages = async (sessionMessages: Message[]) => {
-    try {
-      await AsyncStorage.setItem('odyssey_session_messages', JSON.stringify(sessionMessages));
-    } catch (error) {
-      console.error('Failed to persist messages:', error);
-    }
-  };
-
-  const getPersistedSessionData = async () => {
-    try {
-      const savedSession = await AsyncStorage.getItem('odyssey_current_session');
-      const savedMessages = await AsyncStorage.getItem('odyssey_session_messages');
-      
-      return {
-        session: savedSession ? JSON.parse(savedSession) : null,
-        sessionMessages: savedMessages ? JSON.parse(savedMessages) : null
-      };
-    } catch (error) {
-      console.error('Failed to get persisted session data:', error);
-      return { session: null, sessionMessages: null };
-    }
-  };
-
-  const clearPersistedSessionData = async () => {
-    try {
-      await AsyncStorage.removeItem('odyssey_current_session');
-      await AsyncStorage.removeItem('odyssey_session_messages');
-    } catch (error) {
-      console.error('Failed to clear persisted session data:', error);
-    }
-  };
-
-  // Initialize any persisted session on app start
-  useEffect(() => {
-    const loadPersistedSession = async () => {
-      try {
-        const { session, sessionMessages } = await getPersistedSessionData();
-        
-        if (session && sessionMessages) {
-          setCurrentSession(session);
-          setMessages(sessionMessages.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          })));
-        }
-      } catch (error) {
-        console.error('Failed to load persisted session:', error);
-      }
-    };
-
-    loadPersistedSession();
-  }, []);
-
-  // Auto-save session state periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      saveSessionState();
-    }, 30000); // Save every 30 seconds
-
-    return () => clearInterval(interval);
-  }, [currentSession, messages]);
 
   const value = {
     currentSession,
     messages,
-    coherenceState,
     isSessionLoading,
     isInteracting,
     isStreaming,
@@ -327,11 +218,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     startSession,
     resetSession,
     endSession,
-    sendMessage,
     sendMessageStream,
-    getSessionHistory,
-    saveSessionState,
-    loadSessionState
   };
 
   return (

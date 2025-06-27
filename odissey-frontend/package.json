@@ -6,8 +6,8 @@
     "start": "expo start",
     "start:dev": "npm run set-dev && expo start",
     "start:prod": "npm run set-prod && expo start",
-    "set-dev": "node -e \"const fs = require('fs'); const config = fs.readFileSync('src/config.ts', 'utf8'); fs.writeFileSync('src/config.ts', config.replace(/const ENVIRONMENT.*= '(development|production)';/, 'const ENVIRONMENT: \\'development\\' | \\'production\\' = \\'development\\';'));\"",
-    "set-prod": "node -e \"const fs = require('fs'); const config = fs.readFileSync('src/config.ts', 'utf8'); fs.writeFileSync('src/config.ts', config.replace(/const ENVIRONMENT.*= '(development|production)';/, 'const ENVIRONMENT: \\'development\\' | \\'production\\' = \\'production\\';'));\"",
+    "set-dev": "node -e \"const fs = require('fs'); const config = fs.readFileSync('src/config.ts', 'utf8'); fs.writeFileSync('src/config.ts', config.replace(/const FORCE_ENVIRONMENT.*= '(development|production)';/, 'const FORCE_ENVIRONMENT: \\'development\\' | \\'production\\' | null = \\'development\\';'));\"",
+    "set-prod": "node -e \"const fs = require('fs'); const config = fs.readFileSync('src/config.ts', 'utf8'); fs.writeFileSync('src/config.ts', config.replace(/const FORCE_ENVIRONMENT.*= '(development|production)';/, 'const FORCE_ENVIRONMENT: \\'development\\' | \\'production\\' | null = \\'production\\';'));\"",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web"

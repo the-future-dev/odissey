@@ -1,7 +1,13 @@
-// Configuration for API endpoints
-// You can easily change this for different environments
+/**
+ * Application Configuration
+ * Simplified environment management for API endpoints
+ */
 
-const configs = {
+interface Config {
+  apiUrl: string;
+}
+
+const configs: Record<string, Config> = {
   development: {
     apiUrl: 'http://localhost:8787',
     // For Android emulator, use: 'http://10.0.2.2:8787'
@@ -11,21 +17,20 @@ const configs = {
   }
 };
 
-// Auto-detect environment or manually override
-const isDevEnvironment = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV === 'development';
+// Simple environment detection
+const isDevelopment = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV === 'development';
 
-// Manual override - set this to force a specific environment
-// null = auto-detect, 'development' = local backend, 'production' = deployed backend
-const MANUAL_ENVIRONMENT: 'development' | 'production' | null = 'production';
+// Manual override for easy testing - change this line to switch environments
+const FORCE_ENVIRONMENT: 'development' | 'production' | null = 'development';
 
-const ENVIRONMENT: 'development' | 'production' = MANUAL_ENVIRONMENT || (isDevEnvironment ? 'development' : 'production');
+// Final environment determination
+const ENVIRONMENT = FORCE_ENVIRONMENT || (isDevelopment ? 'development' : 'production');
 
 export const API_URL = configs[ENVIRONMENT].apiUrl;
 
-// Easy toggle function for testing
-export const setDevelopmentMode = () => {
-  console.log('Current environment:', ENVIRONMENT);
-  console.log('Current API URL:', API_URL);
-  console.log('To use local backend, set MANUAL_ENVIRONMENT to "development" in src/config.ts');
-  console.log('To use production backend, set MANUAL_ENVIRONMENT to "production" in src/config.ts');
-}; 
+// Development utility
+export const getEnvironmentInfo = () => ({
+  environment: ENVIRONMENT,
+  apiUrl: API_URL,
+  isDevelopment: ENVIRONMENT === 'development'
+}); 

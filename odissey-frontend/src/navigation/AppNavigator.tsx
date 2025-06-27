@@ -8,10 +8,16 @@ import { WorldSelectionScreen } from '../screens/WorldSelectionScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export const AppNavigator = () => {
+export const AppNavigator: React.FC = () => {
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator 
+        initialRouteName="WorldSelection"
+        screenOptions={{ 
+          headerShown: false,
+          animation: 'slide_from_right'
+        }}
+      >
         <Stack.Screen name="WorldSelection" component={WorldSelectionScreen} />
         <Stack.Screen name="Session" component={SessionScreen} />
       </Stack.Navigator>

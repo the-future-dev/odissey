@@ -1,7 +1,10 @@
 import { API_URL } from '../config';
 
-export { API_URL};
+export { API_URL };
 
+/**
+ * Custom API Error class for better error handling
+ */
 export class ApiError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
@@ -9,23 +12,27 @@ export class ApiError extends Error {
   }
 }
 
-export const handleResponse = async (response: Response) => {
+/**
+ * Standardized response handler for all API calls
+ */
+export const handleResponse = async <T>(response: Response): Promise<T> => {
   if (!response.ok) {
-    let errorText: string;
+    let errorMessage: string;
     try {
-      errorText = await response.text();
+      const errorData = await response.json();
+      errorMessage = errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
     } catch {
-      errorText = `HTTP ${response.status}: ${response.statusText}`;
+      errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }
     
-    console.error(`API Error: ${response.status} ${response.statusText}`, errorText);
-    throw new ApiError(errorText || 'Unknown error', response.status);
+    console.error(`API Error [${response.status}]:`, errorMessage);
+    throw new ApiError(errorMessage, response.status);
   }
   
   try {
     return await response.json();
   } catch (error) {
     console.error('Failed to parse JSON response:', error);
-    throw new ApiError('Invalid JSON response');
+    throw new ApiError('Invalid JSON response from server');
   }
 };

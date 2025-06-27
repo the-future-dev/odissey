@@ -22,25 +22,58 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     streamingMessage,
     startSession,
     resetSession,
-    sendMessage: sendSessionMessage,
     sendMessageStream 
   } = useSession();
+
   const [inputText, setInputText] = useState('');
   const [availableOptions, setAvailableOptions] = useState<ParsedOption[]>([]);
   const cursorOpacity = useRef(new Animated.Value(1)).current;
   const dotsOpacity = useRef(new Animated.Value(0.3)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Parse options from the latest narrator message
+  // Initialize session when component mounts or worldId changes
   useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && lastMessage.type === 'narrator') {
-      const options = parseOptionsFromText(lastMessage.text);
-      setAvailableOptions(options);
-    } else if (isStreaming && streamingMessage) {
-      const options = parseOptionsFromText(streamingMessage);
+    if (!currentSession || currentSession.worldId !== worldId) {
+      initializeSession();
+    }
+  }, [worldId]);
+
+  // Parse options from latest narrator message
+  useEffect(() => {
+    const textToParse = isStreaming ? streamingMessage : 
+      (messages.length > 0 && messages[messages.length - 1]?.type === 'narrator' 
+        ? messages[messages.length - 1].text 
+        : '');
+    
+    if (textToParse) {
+      const options = parseOptionsFromText(textToParse);
       setAvailableOptions(options);
     }
+  }, [messages, streamingMessage, isStreaming]);
+
+  // Handle animations
+  useEffect(() => {
+    if (isStreaming) {
+      startBlinkingAnimation();
+    } else {
+      cursorOpacity.setValue(1);
+    }
+  }, [isStreaming]);
+
+  useEffect(() => {
+    if (isInteracting && !isStreaming) {
+      startThinkingAnimation();
+    } else {
+      dotsOpacity.setValue(0.3);
+    }
+  }, [isInteracting, isStreaming]);
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    return () => clearTimeout(timer);
   }, [messages, streamingMessage]);
 
   const parseOptionsFromText = (text: string): ParsedOption[] => {
@@ -49,12 +82,11 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     
     for (const line of lines) {
       const trimmed = line.trim();
-      // Match patterns like "1) Some text" or "1. Some text" or "1 - Some text"
       const match = trimmed.match(/^(\d+)[\)\.\-\s]+(.+)$/);
       if (match) {
         const number = parseInt(match[1]);
         const text = match[2].trim();
-        if (number >= 1 && number <= 10 && text.length > 0) { // Support up to 10 options
+        if (number >= 1 && number <= 10 && text.length > 0) {
           options.push({ number, text });
         }
       }
@@ -63,9 +95,62 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     return options;
   };
 
-  const handleOptionSelect = (option: ParsedOption) => {
-    // Set the input to show the selected option
-    setInputText(`${option.number}) ${option.text}`);
+  const startBlinkingAnimation = () => {
+    const blink = () => {
+      Animated.sequence([
+        Animated.timing(cursorOpacity, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: false,
+        }),
+        Animated.timing(cursorOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: false,
+        }),
+      ]).start(blink);
+    };
+    blink();
+  };
+
+  const startThinkingAnimation = () => {
+    const animate = () => {
+      Animated.sequence([
+        Animated.timing(dotsOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: false,
+        }),
+        Animated.timing(dotsOpacity, {
+          toValue: 0.3,
+          duration: 600,
+          useNativeDriver: false,
+        }),
+      ]).start(animate);
+    };
+    animate();
+  };
+
+  const initializeSession = async () => {
+    try {
+      await startSession(worldId);
+    } catch (error) {
+      console.error('Failed to create session:', error);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || isInteracting) return;
+
+    const messageToSend = inputText.trim();
+    setInputText('');
+
+    try {
+      await sendMessageStream(messageToSend);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setInputText(messageToSend);
+    }
   };
 
   const handleQuickSend = async (optionText: string) => {
@@ -78,93 +163,6 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  useEffect(() => {
-    // Only start a new session if we don't have a current session
-    // or if the current session is for a different world
-    if (!currentSession || currentSession.worldId !== worldId) {
-      initializeSession();
-    }
-  }, [worldId]);
-
-  // Cursor blinking animation
-  useEffect(() => {
-    if (isStreaming) {
-      const blink = () => {
-        Animated.sequence([
-          Animated.timing(cursorOpacity, {
-            toValue: 0,
-            duration: 500,
-            useNativeDriver: false, // Use JS driver for web compatibility
-          }),
-          Animated.timing(cursorOpacity, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: false,
-          }),
-        ]).start(blink);
-      };
-      blink();
-    } else {
-      cursorOpacity.setValue(1);
-    }
-  }, [isStreaming]);
-
-  // Thinking dots animation
-  useEffect(() => {
-    if (isInteracting && !isStreaming) {
-      const animate = () => {
-        Animated.sequence([
-          Animated.timing(dotsOpacity, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: false, // Use JS driver for web compatibility
-          }),
-          Animated.timing(dotsOpacity, {
-            toValue: 0.3,
-            duration: 600,
-            useNativeDriver: false,
-          }),
-        ]).start(animate);
-      };
-      animate();
-    } else {
-      dotsOpacity.setValue(0.3);
-    }
-  }, [isInteracting, isStreaming]);
-
-  // Auto-scroll to bottom when messages change or streaming updates
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [messages, streamingMessage]);
-
-  const initializeSession = async () => {
-    try {
-      await startSession(worldId);
-    } catch (error) {
-      console.error('Failed to create session:', error);
-      // You could add a user-friendly error state here
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!inputText.trim() || isInteracting) return;
-
-    const messageToSend = inputText.trim();
-    setInputText(''); // Clear input immediately for better UX
-
-    try {
-      // Use streaming for a better experience
-      await sendMessageStream(messageToSend);
-    } catch (error) {
-      console.error('Streaming and all fallbacks failed:', error);
-      // Restore input text if all methods fail
-      setInputText(messageToSend);
-    }
-  };
-
   const handleResetWorld = async () => {
     if (isInteracting || isStreaming) return;
 
@@ -172,34 +170,34 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       await resetSession(worldId);
     } catch (error) {
       console.error('Failed to reset world:', error);
-      // You could add a user-friendly error state here
     }
   };
 
+  // Loading state
   if (isSessionLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text>Starting your adventure...</Text>
+        <Text style={styles.statusText}>Starting your adventure...</Text>
       </View>
     );
   }
 
-  // Add error state if session failed to load
+  // Error state - session failed to load
   if (!currentSession) {
     return (
       <View style={[styles.container, styles.centered]}>
         <Text style={styles.errorText}>Failed to start adventure</Text>
         <TouchableOpacity 
-          style={styles.errorButton} 
+          style={styles.actionButton} 
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.errorButtonText}>← Back to Worlds</Text>
+          <Text style={styles.actionButtonText}>← Back to Worlds</Text>
         </TouchableOpacity>
         <TouchableOpacity 
-          style={styles.retryButton} 
+          style={[styles.actionButton, styles.secondaryButton]} 
           onPress={initializeSession}
         >
-          <Text style={styles.retryButtonText}>Try Again</Text>
+          <Text style={styles.actionButtonText}>Try Again</Text>
         </TouchableOpacity>
       </View>
     );
@@ -210,22 +208,24 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backButton}>← Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{worldTitle || 'Adventure'}</Text>
         <TouchableOpacity 
-          style={styles.resetButton}
+          style={[styles.resetButton, (isInteracting || isStreaming) && styles.resetButtonDisabled]}
           onPress={handleResetWorld}
           disabled={isInteracting || isStreaming}
         >
-          <Text style={[styles.resetButtonText, (isInteracting || isStreaming) && styles.resetButtonDisabled]}>
-            Reset World
+          <Text style={[styles.resetButtonText, (isInteracting || isStreaming) && styles.disabledText]}>
+            Reset
           </Text>
         </TouchableOpacity>
       </View>
 
+      {/* Messages */}
       <ScrollView 
         ref={scrollViewRef}
         style={styles.messagesContainer}
@@ -247,24 +247,28 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
             </Text>
           </View>
         ))}
+
+        {/* Streaming message */}
         {isStreaming && streamingMessage && (
           <View style={[styles.messageCard, styles.narratorMessage, styles.streamingMessage]}>
-            <View style={styles.streamingTextContainer}>
+            <View style={styles.streamingContainer}>
               <Text style={styles.narratorMessageText}>{streamingMessage}</Text>
               <Animated.Text style={[styles.cursor, { opacity: cursorOpacity }]}>|</Animated.Text>
             </View>
           </View>
         )}
+
+        {/* Thinking indicator */}
         {isInteracting && !isStreaming && (
           <View style={[styles.messageCard, styles.narratorMessage]}>
-            <View style={styles.thinkingTextContainer}>
+            <View style={styles.streamingContainer}>
               <Text style={styles.narratorMessageText}>The narrator is thinking</Text>
               <Animated.Text style={[styles.thinkingDots, { opacity: dotsOpacity }]}>...</Animated.Text>
             </View>
           </View>
         )}
 
-        {/* Show option buttons when available */}
+        {/* Quick action options */}
         {availableOptions.length > 0 && !isInteracting && (
           <View style={styles.optionsContainer}>
             <Text style={styles.optionsTitle}>Quick Actions:</Text>
@@ -273,6 +277,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
                 key={option.number}
                 style={styles.optionButton}
                 onPress={() => handleQuickSend(`${option.number}) ${option.text}`)}
+                activeOpacity={0.7}
               >
                 <Text style={styles.optionNumber}>{option.number}</Text>
                 <Text style={styles.optionText}>{option.text}</Text>
@@ -283,6 +288,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
         )}
       </ScrollView>
 
+      {/* Input */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.textInput}
@@ -291,6 +297,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
           placeholder="Choose an option above or type your own action..."
           multiline
           onSubmitEditing={handleSendMessage}
+          editable={!isInteracting}
         />
         <TouchableOpacity 
           style={[styles.sendButton, (!inputText.trim() || isInteracting) && styles.sendButtonDisabled]}
@@ -314,6 +321,7 @@ const styles = StyleSheet.create({
   centered: {
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   header: {
     flexDirection: 'row',
@@ -322,7 +330,10 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 60,
     backgroundColor: 'white',
-    boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 3,
   },
   backButton: {
@@ -343,13 +354,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
+  resetButtonDisabled: {
+    backgroundColor: '#FCA5A5',
+  },
   resetButtonText: {
     color: 'white',
     fontSize: 14,
     fontWeight: '600',
-  },
-  resetButtonDisabled: {
-    color: '#9CA3AF',
   },
   messagesContainer: {
     flex: 1,
@@ -371,6 +382,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
+  streamingMessage: {
+    backgroundColor: '#F8F9FF',
+    borderColor: '#8B5CF6',
+    borderWidth: 2,
+  },
   messageText: {
     fontSize: 16,
     lineHeight: 22,
@@ -380,6 +396,57 @@ const styles = StyleSheet.create({
   },
   narratorMessageText: {
     color: '#1E293B',
+  },
+  streamingContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  cursor: {
+    color: '#8B5CF6',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  thinkingDots: {
+    color: '#8B5CF6',
+    fontSize: 16,
+  },
+  optionsContainer: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  optionsTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  optionNumber: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#8B5CF6',
+    marginRight: 12,
+    minWidth: 20,
+  },
+  optionText: {
+    fontSize: 14,
+    color: '#1E293B',
+    flex: 1,
+  },
+  optionsHint: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 8,
   },
   inputContainer: {
     flexDirection: 'row',
@@ -412,29 +479,10 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '600',
   },
-  streamingMessage: {
-    backgroundColor: '#F8F9FF',
-    borderColor: '#8B5CF6',
-    borderWidth: 2,
-    boxShadow: '0px 2px 4px rgba(139, 92, 246, 0.1)',
-    elevation: 2,
-  },
-  cursor: {
-    color: '#8B5CF6',
+  statusText: {
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  thinkingDots: {
-    color: '#8B5CF6',
-    fontSize: 16,
-  },
-  streamingTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  thinkingTextContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    color: '#64748B',
+    textAlign: 'center',
   },
   errorText: {
     color: '#EF4444',
@@ -443,78 +491,22 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     textAlign: 'center',
   },
-  errorButton: {
+  actionButton: {
     backgroundColor: '#8B5CF6',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
     marginBottom: 12,
   },
-  errorButtonText: {
+  secondaryButton: {
+    backgroundColor: '#64748B',
+  },
+  actionButtonText: {
     color: 'white',
     fontWeight: '600',
-  },
-  retryButton: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  optionsContainer: {
-    padding: 16,
-    backgroundColor: '#F8F9FF',
-    borderRadius: 12,
-    margin: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  optionsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1E293B',
-    marginBottom: 12,
     textAlign: 'center',
   },
-  optionButton: {
-    flexDirection: 'row',
-    padding: 12,
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    marginBottom: 8,
-    alignItems: 'flex-start',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  optionNumber: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#8B5CF6',
-    marginRight: 8,
-    minWidth: 20,
-  },
-  optionText: {
-    fontSize: 16,
-    color: '#1E293B',
-    flex: 1,
-    lineHeight: 22,
-  },
-  optionsHint: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic',
+  disabledText: {
+    color: '#9CA3AF',
   },
 }); 
