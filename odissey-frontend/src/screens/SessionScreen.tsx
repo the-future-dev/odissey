@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Animated } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
 import { useSession } from '../contexts/SessionContext';
 
@@ -26,6 +27,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   const [inputText, setInputText] = useState('');
   const [availableOptions, setAvailableOptions] = useState<ParsedOption[]>([]);
   const dotsOpacity = useRef(new Animated.Value(0.3)).current;
+  const optionsOpacity = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
   // Initialize session when component mounts or worldId changes
@@ -44,7 +46,16 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     if (textToParse) {
       const options = parseOptionsFromText(textToParse);
       setAvailableOptions(options);
+    } else {
+      setAvailableOptions([]);
     }
+    
+    // Always animate options container to visible since chat input is always there
+    Animated.timing(optionsOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
   }, [messages]);
 
   // Handle thinking animation
@@ -185,7 +196,8 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
           style={styles.backButton} 
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>← Worlds</Text>
+          <Ionicons name="chevron-back" size={24} color="#8B5CF6" />
+          <Text style={styles.backButtonText}>Worlds</Text>
         </TouchableOpacity>
         <Text style={styles.worldTitle} numberOfLines={1}>
           {worldTitle}
@@ -195,7 +207,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
           onPress={handleResetWorld}
           disabled={isInteracting}
         >
-          <Text style={styles.resetButtonText}>Reset</Text>
+          <Ionicons name="refresh" size={16} color="white" />
         </TouchableOpacity>
       </View>
 
@@ -240,60 +252,65 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       </ScrollView>
 
       {/* Quick Options */}
-      {availableOptions.length > 0 && !isInteracting && (
-        <View style={styles.optionsContainer}>
-          <Text style={styles.optionsTitle}>Quick Actions:</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.optionsScrollContent}
-          >
-            {availableOptions.map((option) => (
-              <TouchableOpacity
-                key={option.number}
-                style={styles.optionButton}
-                onPress={() => handleQuickSend(option.text)}
-              >
-                <Text style={styles.optionNumber}>{option.number}</Text>
-                <Text style={styles.optionText} numberOfLines={2}>
-                  {option.text}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+      {!isInteracting && (
+        <Animated.View style={[styles.optionsContainer, { opacity: optionsOpacity }]}>
+          {availableOptions.map((option, index) => (
+            <TouchableOpacity
+              key={option.number}
+              style={styles.optionButton}
+              onPress={() => handleQuickSend(option.text)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.optionContent}>
+                <Text style={styles.optionNumber}>{index + 1})</Text>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.optionTextScroll}
+                  contentContainerStyle={styles.optionTextContainer}
+                >
+                  <Text style={styles.optionText}>
+                    {option.text}
+                  </Text>
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          ))}
+          
+          {/* Chat Input as Last Option */}
+          <View style={styles.chatOptionContainer}>
+            <View style={styles.optionContent}>
+              <Text style={styles.optionNumber}>{availableOptions.length + 1})</Text>
+              <View style={styles.chatInputWrapper}>
+                <TextInput
+                  style={styles.chatInput}
+                  value={inputText}
+                  onChangeText={setInputText}
+                  placeholder="Type your custom action..."
+                  placeholderTextColor="#666"
+                  multiline
+                  maxLength={500}
+                  editable={!isInteracting}
+                />
+                <TouchableOpacity 
+                  style={[
+                    styles.chatSendButton, 
+                    (!inputText.trim() || isInteracting) && styles.chatSendButtonDisabled
+                  ]}
+                  onPress={handleSendMessage}
+                  disabled={!inputText.trim() || isInteracting}
+                >
+                  <Ionicons 
+                    name="send" 
+                    size={18} 
+                    color={(!inputText.trim() || isInteracting) ? '#9CA3AF' : 'white'} 
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
       )}
-
-      {/* Input Area */}
-      <View style={styles.inputContainer}>
-        <View style={styles.inputWrapper}>
-          <TextInput
-            style={styles.textInput}
-            value={inputText}
-            onChangeText={setInputText}
-            placeholder="What do you do next?"
-            placeholderTextColor="#666"
-            multiline
-            maxLength={500}
-            editable={!isInteracting}
-          />
-          <TouchableOpacity 
-            style={[
-              styles.sendButton, 
-              (!inputText.trim() || isInteracting) && styles.sendButtonDisabled
-            ]}
-            onPress={handleSendMessage}
-            disabled={!inputText.trim() || isInteracting}
-          >
-            <Text style={[
-              styles.sendButtonText,
-              (!inputText.trim() || isInteracting) && styles.sendButtonTextDisabled
-            ]}>
-              Send
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
     </KeyboardAvoidingView>
   );
 };
@@ -322,14 +339,16 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   backButton: {
-    fontSize: 16,
-    color: '#8B5CF6',
-    marginRight: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   backButtonText: {
     fontSize: 16,
     color: '#8B5CF6',
-    marginRight: 16,
+    marginLeft: 4,
+    fontWeight: '500',
   },
   worldTitle: {
     fontSize: 20,
@@ -343,11 +362,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-  },
-  resetButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40,
   },
   messagesContainer: {
     flex: 1,
@@ -360,17 +377,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    maxWidth: '80%',
   },
   userMessage: {
     alignSelf: 'flex-end',
     backgroundColor: '#8B5CF6',
+    maxWidth: '80%',
   },
   narratorMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'white',
+    alignSelf: 'stretch',
+    backgroundColor: '#FEFEFE',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    marginHorizontal: 0,
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   messageText: {
     fontSize: 16,
@@ -381,6 +406,9 @@ const styles = StyleSheet.create({
   },
   narratorMessageText: {
     color: '#1E293B',
+    fontSize: 17,
+    lineHeight: 26,
+    letterSpacing: 0.3,
   },
   messageTime: {
     fontSize: 12,
@@ -401,77 +429,92 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   optionsContainer: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  optionsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1E293B',
+    marginTop: 8,
     marginBottom: 12,
-  },
-  optionsScrollContent: {
-    padding: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
   },
   optionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: 'white',
-    padding: 12,
-    borderRadius: 8,
-    marginRight: 8,
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  optionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   optionNumber: {
     fontSize: 16,
-    fontWeight: 'bold',
     color: '#8B5CF6',
+    fontWeight: 'bold',
     marginRight: 12,
-    minWidth: 20,
+    minWidth: 24,
+  },
+  optionTextScroll: {
+    flex: 1,
+    maxHeight: 24,
+  },
+  optionTextContainer: {
+    alignItems: 'center',
+    paddingRight: 20,
   },
   optionText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#1E293B',
-    flex: 1,
+    fontWeight: '500',
   },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 16,
+  chatOptionContainer: {
     backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  chatInputWrapper: {
+    flexDirection: 'row',
+    flex: 1,
+    alignItems: 'center',
     gap: 12,
   },
-  inputWrapper: {
-    flexDirection: 'row',
-    flex: 1,
-  },
-  textInput: {
+  chatInput: {
     flex: 1,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 8,
+    padding: 10,
     fontSize: 16,
-    maxHeight: 100,
+    maxHeight: 80,
+    backgroundColor: '#FAFAFA',
   },
-  sendButton: {
+  chatSendButton: {
     backgroundColor: '#8B5CF6',
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 8,
     justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 44,
+    minHeight: 44,
   },
-  sendButtonDisabled: {
+  chatSendButtonDisabled: {
     backgroundColor: '#A1A1AA',
-  },
-  sendButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  sendButtonTextDisabled: {
-    color: '#9CA3AF',
   },
   statusText: {
     fontSize: 16,
