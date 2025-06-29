@@ -12,26 +12,25 @@ export class StoryService {
     this.aiService = aiService;
     this.db = db;
     
-    Logger.info('StoryService initialized (simplified)', {
+    Logger.info('StoryService', {
       component: 'StoryService',
       operation: 'INIT'
     });
   }
 
   /**
-   * Generate a streaming narrative response
+   * Generate a narrative response
    */
-  async generateStreamingResponse(
+  async generateResponse(
     userMessage: string,
     session: Session,
     world: World,
-    recentMessages: Message[],
-    onChunk: (chunk: string) => void
+    recentMessages: Message[]
   ): Promise<string> {
     const timer = createTimer();
     const context = {
       component: 'StoryService',
-      operation: 'GENERATE_STREAMING',
+      operation: 'GENERATE_RESPONSE',
       sessionId: session.id,
       metadata: {
         worldId: world.id,
@@ -40,7 +39,7 @@ export class StoryService {
       }
     };
 
-    Logger.info('Starting streaming story response', context);
+    Logger.info('Starting story response generation', context);
 
     try {
       // Generate dynamic system prompt
@@ -53,46 +52,18 @@ export class StoryService {
         recentMessages
       );
 
-      // Generate streaming AI response
+      // Generate AI response
       const aiRequest: TextToTextRequest = {
         messages,
-        temperature: 0.2,
-        maxTokens: 5000,
-        onChunk: onChunk,
-        streaming: true
+        temperature: 0.1,
+        maxTokens: 5000
       };
 
-      const aiTimer = createTimer();
-      Logger.info('Requesting streaming AI generation', {
-        ...context,
-        metadata: {
-          ...context.metadata,
-          messagesCount: messages.length,
-          systemPromptLength: systemPrompt.length
-        }
-      });
-
-      const response = await this.generateStreamingWithRetry(aiRequest, 3, context);
-      
-      Logger.timing('Streaming AI response completed', aiTimer, {
-        ...context,
-        metadata: {
-          ...context.metadata,
-          responseLength: response.content.length
-        }
-      });
-      
-      Logger.timing('Streaming response completed', timer, {
-        ...context,
-        metadata: {
-          ...context.metadata,
-          finalResponseLength: response.content.length
-        }
-      });
+      const response = await this.generateWithRetry(aiRequest, 3, context);
       
       return response.content;
     } catch (error) {
-      Logger.error('Streaming response failed', error, {
+      Logger.error('Response generation failed', error, {
         ...context,
         duration: getElapsed(timer)
       });
@@ -101,34 +72,35 @@ export class StoryService {
   }
 
   /**
-   * Generate a simple system prompt based on world information
+   * Generate a system prompt
    */
   private generateSystemPrompt(world: World): string {
-    return `You are a storyteller guiding the user through the interactive adventure: "${world.title}".
-The user is the protagonist of your story, while you are the omniscient narrator speaking directly to the reader as "you".
-Omniscent with the limitation of not knowing what the user wants to do!
+    return `You are a narrator. Your objective is to shape the story "${world.title}", where the user is the main character.
+You are the omniscient narrator: your objective is to shape the best story for the user. You only don't know how the user will act in your story!
 
 WORLD DESCRIPTION:
 ${world.description || ''}
 
 TASK - RESPONSE STRUCTURE REQUIREMENTS:
 - 200-300 words per response
-- Use simple worlds, a friendly tone and be clear.
-- Structure each response that generally include:
+- Use simple worlds, a friendly tone and a simple phrase format.
+- Structure each response to generally include:
   1. SCENE SETTING: describe the scene and/or the situation.
-  2. EVENT: Show something happening to get the user interested.
+  2. EVENT: Something happening to get the user interested.
   3. CHOICES: Give 3 options the user can pick from.
 
-  Use a numbered list with format:
-  1) ... \n
-  2) ... \n
-  3) ... \n`;
+FORMAT - at the end of the message use a numbered list with format:
+\`\`\`choice
+1) ... 
+2) ... 
+3) ... 
+\`\`\``;
   }
 
   /**
-   * Generate streaming response with retry logic
+   * Generate response with retry logic
    */
-  private async generateStreamingWithRetry(
+  private async generateWithRetry(
     request: TextToTextRequest, 
     maxRetries: number,
     context: any
@@ -141,22 +113,10 @@ TASK - RESPONSE STRUCTURE REQUIREMENTS:
           ...context,
           metadata: { ...context.metadata, attempt }
         });
-
-        const response = await this.aiService.generateText(request);
         
-        if (this.isValidResponse(response.content)) {
-          Logger.info(`AI generation successful on attempt ${attempt}`, {
-            ...context,
-            metadata: { 
-              ...context.metadata, 
-              attempt, 
-              responseLength: response.content.length 
-            }
-          });
-          return response;
-        } else {
-          throw new Error('Invalid response format received');
-        }
+        const response = await this.aiService.generateText(request);
+
+        return response;
       } catch (error) {
         lastError = error as Error;
         Logger.warn(`AI generation attempt ${attempt} failed`, {
@@ -184,18 +144,7 @@ TASK - RESPONSE STRUCTURE REQUIREMENTS:
   }
 
   /**
-   * Validate AI response content
-   */
-  private isValidResponse(content: string): boolean {
-    return !!content && 
-           content.trim().length > 10 && 
-           content.trim().length < 2000 &&
-           !content.includes('[ERROR]') &&
-           !content.includes('undefined');
-  }
-
-  /**
-   * Sleep utility for retry delays
+   * Sleep utility
    */
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -213,11 +162,11 @@ TASK - RESPONSE STRUCTURE REQUIREMENTS:
       { role: 'system', content: systemPrompt }
     ];
 
-    // Add recent conversation history (limit to last 8 messages to avoid token limits)
-    const limitedHistory = recentMessages.slice(-8);
-    for (const msg of limitedHistory) {
+    // Add recent conversation history
+    for (const msg of recentMessages) {
+      const role = this.mapMessageTypeToRole(msg.type);
       messages.push({
-        role: msg.type === 'user' ? 'user' : 'assistant',
+        role,
         content: msg.content
       });
     }
@@ -228,5 +177,24 @@ TASK - RESPONSE STRUCTURE REQUIREMENTS:
     return messages;
   }
 
-
+  /**
+   * Map database message types to AI role types with validation
+   */
+  private mapMessageTypeToRole(messageType: string): 'user' | 'assistant' {
+    switch (messageType) {
+      case 'user':
+        return 'user';
+      case 'narrator':
+        return 'assistant';
+      default:
+        Logger.error('Unknown message type encountered', new Error(`Invalid message type: ${messageType}`), {
+          component: 'StoryService',
+          operation: 'MAP_MESSAGE_TYPE',
+          metadata: {
+            messageType
+          }
+        });
+        throw new Error(`Unknown message type: ${messageType}. Expected 'user' or 'narrator'.`);
+    }
+  }
 } 

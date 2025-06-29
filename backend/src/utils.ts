@@ -210,7 +210,7 @@ export function logRequest(request: Request, info: string = ''): void {
     if (sessionMatch) {
       const sessionId = sessionMatch[1];
       const shortSessionId = sessionId.substring(0, 8) + '...';
-      Logger.info(`${method} /sessions/${shortSessionId}/interact${pathname.includes('stream') ? '-stream' : ''} ${info}`, {
+      Logger.info(`${method} /sessions/${shortSessionId}/interact ${info}`, {
         component: 'API',
         operation: 'REQUEST',
         sessionId: sessionId

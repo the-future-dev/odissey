@@ -1,21 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SessionData, Message } from '../types';
-import { TokenManager, createSession, interactWithStoryStream } from '../api';
+import { TokenManager, createSession } from '../api';
+import { API_URL } from '../config';
 
 interface SessionContextType {
   currentSession: SessionData | null;
   messages: Message[];
   isSessionLoading: boolean;
   isInteracting: boolean;
-  isStreaming: boolean;
-  streamingMessage: string;
   
   // Session management
   startSession: (worldId: string) => Promise<void>;
   resetSession: (worldId: string) => Promise<void>;
   endSession: () => Promise<void>;
-  sendMessageStream: (message: string) => Promise<void>;
+  sendMessage: (message: string) => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -31,8 +30,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingMessage, setStreamingMessage] = useState('');
 
   // Load persisted session on mount
   useEffect(() => {
@@ -73,8 +70,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     // Clear current state
     setCurrentSession(null);
     setMessages([]);
-    setStreamingMessage('');
-    setIsStreaming(false);
     setIsInteracting(false);
     
     // Clear storage
@@ -87,20 +82,16 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   const endSession = async () => {
     setCurrentSession(null);
     setMessages([]);
-    setStreamingMessage('');
-    setIsStreaming(false);
     setIsInteracting(false);
     
     await clearSessionStorage();
   };
 
-  const sendMessageStream = async (message: string) => {
+  const sendMessage = async (message: string) => {
     if (!currentSession) {
       throw new Error('No active session');
     }
     
-    setIsStreaming(true);
-    setStreamingMessage('');
     setIsInteracting(true);
     
     try {
@@ -116,47 +107,36 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const updatedMessages = [...messages, userMessage];
       setMessages(updatedMessages);
       
-      // Start streaming response
-      await interactWithStoryStream(
-        token,
-        currentSession.sessionId,
-        message,
-        // onChunk
-        (chunk: string) => {
-          setStreamingMessage(prev => prev + chunk);
+      // Send message and get response
+      const response = await fetch(`${API_URL}/sessions/${currentSession.sessionId}/interact`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
-        // onComplete
-        (fullResponse: string) => {
-          const narratorMessage: Message = {
-            type: 'narrator',
-            text: fullResponse,
-            timestamp: new Date()
-          };
-          
-          const finalMessages = [...updatedMessages, narratorMessage];
-          setMessages(finalMessages);
-          
-          // Clear streaming state
-          setStreamingMessage('');
-          setIsStreaming(false);
-          setIsInteracting(false);
-        },
-        // onError
-        (error: string) => {
-          console.error('Streaming error:', error);
-          setStreamingMessage('');
-          setIsStreaming(false);
-          setIsInteracting(false);
-          throw new Error(error);
-        }
-      );
+        body: JSON.stringify({ message }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      const narratorMessage: Message = {
+        type: 'narrator',
+        text: data.response,
+        timestamp: new Date()
+      };
+      
+      const finalMessages = [...updatedMessages, narratorMessage];
+      setMessages(finalMessages);
       
     } catch (error) {
-      console.error('Failed to send streaming message:', error);
-      setStreamingMessage('');
-      setIsStreaming(false);
-      setIsInteracting(false);
+      console.error('Failed to send message:', error);
       throw error;
+    } finally {
+      setIsInteracting(false);
     }
   };
 
@@ -208,17 +188,15 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  const value = {
+  const value: SessionContextType = {
     currentSession,
     messages,
     isSessionLoading,
     isInteracting,
-    isStreaming,
-    streamingMessage,
     startSession,
     resetSession,
     endSession,
-    sendMessageStream,
+    sendMessage,
   };
 
   return (

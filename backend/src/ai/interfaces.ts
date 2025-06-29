@@ -5,8 +5,6 @@ export interface TextToTextRequest {
   temperature?: number;
   maxTokens?: number;
   stopSequences?: string[];
-  streaming?: boolean;
-  onChunk?: (chunk: string) => void;
 }
 
 export interface TextToTextResponse {

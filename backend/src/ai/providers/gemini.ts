@@ -124,21 +124,19 @@ export class GeminiProvider implements AIProvider {
   }
 
   private formatMessages(messages: Array<{ role: string; content: string }>) {
+    let systemInstruction: string | null = null;
     const contents: any[] = [];
     
-    let systemInstruction = '';
-
     for (const message of messages) {
       if (message.role === 'system') {
         systemInstruction = message.content;
-        continue;
+      } else {
+        const role = message.role === 'assistant' ? 'model' : 'user';
+        contents.push({
+          role,
+          parts: [{ text: message.content }]
+        });
       }
-      
-      const role = message.role === 'assistant' ? 'model' : 'user';
-      contents.push({
-        role,
-        parts: [{ text: message.content }]
-      });
     }
     
     return { systemInstruction, contents };

@@ -14,7 +14,7 @@ import { DatabaseService } from '../database/database';
 import { StoryService } from '../story/storyService';
 
 import { Env } from "../routes";
-import { Session, World, Message } from "../database/db-types";
+import { Session, World } from "../database/db-types";
 import { InteractWithStoryRequest } from "./api-types";
 
 export class GenerationRouter {
@@ -57,18 +57,18 @@ export class GenerationRouter {
     const method = request.method;
     const pathname = url.pathname;
 
-    // Streaming session interaction routes
-    const sessionStreamMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact-stream$/);
-    if (sessionStreamMatch && method === 'POST') {
-        const sessionId = sessionStreamMatch[1];
-        return await this.interactWithStoryStream(request, sessionId);
+    // Session interaction route
+    const sessionMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact$/);
+    if (sessionMatch && method === 'POST') {
+        const sessionId = sessionMatch[1];
+        return await this.interactWithStory(request, sessionId);
     }
 
     return null; // Route not handled by this router
   }
 
-  // Streaming interaction
-  private async interactWithStoryStream(request: Request, sessionId: string): Promise<Response> {
+  // Interaction with JSON response
+  private async interactWithStory(request: Request, sessionId: string): Promise<Response> {
     try {
       if (!isValidSessionId(sessionId)) {
         return createErrorResponse('Invalid session ID format', 400);
@@ -114,78 +114,29 @@ export class GenerationRouter {
       // Get recent conversation context
       const recentMessages = await this.db.getRecentSessionMessages(sessionId, 10);
 
-      // Create streaming response
-      const { readable, writable } = new TransformStream();
-      const writer = writable.getWriter();
-      const encoder = new TextEncoder();
-
-      // Start streaming response generation
-      this.handleStreamingGeneration(
-        writer, 
-        encoder, 
-        userMessage, 
-        session, 
-        world, 
-        recentMessages, 
-        sessionId
+      // Generate AI response
+      const narratorResponse = await this.storyService.generateResponse(
+        userMessage,
+        session,
+        world,
+        recentMessages
       );
 
-      return new Response(readable, {
+      // Save narrator response
+      await this.db.createMessage(sessionId, 'narrator', narratorResponse);
+
+      return new Response(JSON.stringify({ 
+        response: narratorResponse 
+      }), {
         headers: {
-          'Content-Type': 'application/x-ndjson',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
+          'Content-Type': 'application/json',
           ...corsHeaders,
         },
       });
 
     } catch (error) {
-      console.error('Error in streaming story interaction:', error);
-      return createErrorResponse('Failed to process streaming story interaction', 500);
-    }
-  }
-
-  private async handleStreamingGeneration(
-    writer: WritableStreamDefaultWriter,
-    encoder: TextEncoder,
-    userMessage: string,
-    session: Session,
-    world: World,
-    recentMessages: Message[],
-    sessionId: string
-  ): Promise<void> {
-    try {
-      let fullResponse = '';
-      
-      // Generate streaming AI response
-      const narratorResponse = await this.storyService.generateStreamingResponse(
-        userMessage,
-        session,
-        world,
-        recentMessages,
-        (chunk: string) => {
-          fullResponse += chunk;
-          const data = JSON.stringify({ type: 'chunk', content: chunk }) + '\n';
-          writer.write(encoder.encode(data)).catch(console.error);
-        }
-      );
-
-      // Send completion signal
-      const completeData = JSON.stringify({ type: 'complete', content: narratorResponse }) + '\n';
-      await writer.write(encoder.encode(completeData));
-
-      // Save narrator response
-      await this.db.createMessage(sessionId, 'narrator', narratorResponse);
-
-    } catch (error) {
-      console.error('Error in streaming response:', error);
-      const errorData = JSON.stringify({ 
-        type: 'error', 
-        content: 'Failed to generate response' 
-      }) + '\n';
-      await writer.write(encoder.encode(errorData));
-    } finally {
-      await writer.close();
+      console.error('Error in story interaction:', error);
+      return createErrorResponse('Failed to process story interaction', 500);
     }
   }
 }
