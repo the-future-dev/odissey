@@ -111,6 +111,50 @@ export class DatabaseService {
       .first<Session>();
   }
 
+  // === SESSION STORY STATE MANAGEMENT ===
+
+  async saveSessionStoryState(sessionId: string, storyState: any): Promise<void> {
+    const storyStateJson = JSON.stringify(storyState);
+    
+    // Update the sessions table with story state
+    await this.db
+      .prepare(`
+        UPDATE sessions 
+        SET story_state = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `)
+      .bind(storyStateJson, sessionId)
+      .run();
+  }
+
+  async getSessionStoryState(sessionId: string): Promise<any | null> {
+    const result = await this.db
+      .prepare('SELECT story_state FROM sessions WHERE id = ?')
+      .bind(sessionId)
+      .first<{ story_state: string | null }>();
+    
+    if (!result || !result.story_state) {
+      return null;
+    }
+    
+    try {
+      return JSON.parse(result.story_state);
+    } catch (error) {
+      Logger.error('Failed to parse story state JSON', error, {
+        component: 'DatabaseService',
+        operation: 'GET_SESSION_STORY_STATE',
+        sessionId
+      });
+      return null;
+    }
+  }
+
+  async deleteSessionStoryState(sessionId: string): Promise<void> {
+    await this.db
+      .prepare('UPDATE sessions SET story_state = NULL WHERE id = ?')
+      .bind(sessionId)
+      .run();
+  }
 
   // === MESSAGE MANAGEMENT ===
 

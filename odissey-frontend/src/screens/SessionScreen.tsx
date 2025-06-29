@@ -154,17 +154,8 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  // Loading state
-  if (isSessionLoading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={styles.statusText}>Starting your adventure...</Text>
-      </View>
-    );
-  }
-
-  // Error state - session failed to load
-  if (!currentSession) {
+  // Error state - session failed to load and no loading in progress
+  if (!currentSession && !isSessionLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
         <Text style={styles.errorText}>Failed to start adventure</Text>
@@ -205,7 +196,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
         <TouchableOpacity 
           style={styles.resetButton} 
           onPress={handleResetWorld}
-          disabled={isInteracting}
+          disabled={isInteracting || isSessionLoading}
         >
           <Ionicons name="refresh" size={16} color="white" />
         </TouchableOpacity>
@@ -238,6 +229,18 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
           </View>
         ))}
 
+        {/* Show session loading indicator when starting session */}
+        {isSessionLoading && (
+          <View style={[styles.messageContainer, styles.narratorMessage]}>
+            <View style={styles.thinkingContainer}>
+              <Animated.Text style={[styles.thinkingDots, { opacity: dotsOpacity }]}>
+                •••
+              </Animated.Text>
+              <Text style={styles.thinkingText}>Starting your adventure...</Text>
+            </View>
+          </View>
+        )}
+
         {/* Show thinking indicator when processing */}
         {isInteracting && (
           <View style={[styles.messageContainer, styles.narratorMessage]}>
@@ -252,7 +255,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       </ScrollView>
 
       {/* Quick Options */}
-      {!isInteracting && (
+      {!isInteracting && !isSessionLoading && (
         <Animated.View style={[styles.optionsContainer, { opacity: optionsOpacity }]}>
           {availableOptions.map((option, index) => (
             <TouchableOpacity
@@ -290,20 +293,20 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
                   placeholderTextColor="#666"
                   multiline
                   maxLength={500}
-                  editable={!isInteracting}
+                  editable={!isInteracting && !isSessionLoading}
                 />
                 <TouchableOpacity 
                   style={[
                     styles.chatSendButton, 
-                    (!inputText.trim() || isInteracting) && styles.chatSendButtonDisabled
+                    (!inputText.trim() || isInteracting || isSessionLoading) && styles.chatSendButtonDisabled
                   ]}
                   onPress={handleSendMessage}
-                  disabled={!inputText.trim() || isInteracting}
+                  disabled={!inputText.trim() || isInteracting || isSessionLoading}
                 >
                   <Ionicons 
                     name="send" 
                     size={18} 
-                    color={(!inputText.trim() || isInteracting) ? '#9CA3AF' : 'white'} 
+                    color={(!inputText.trim() || isInteracting || isSessionLoading) ? '#9CA3AF' : 'white'} 
                   />
                 </TouchableOpacity>
               </View>

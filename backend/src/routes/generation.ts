@@ -11,7 +11,7 @@ import {
 
 import { AIServiceManager, HuggingFaceProvider, GeminiProvider } from '../ai';
 import { DatabaseService } from '../database/database';
-import { StoryService } from '../story/storyService';
+import { StoryManager } from '../story/storyManager';
 
 import { Env } from "../routes";
 import { Session, World } from "../database/db-types";
@@ -20,7 +20,7 @@ import { InteractWithStoryRequest } from "./api-types";
 export class GenerationRouter {
   private db: DatabaseService;
   private aiService: AIServiceManager;
-  private storyService: StoryService;
+  private storyManager: StoryManager;
 
   constructor(env: Env) {
     this.db = new DatabaseService(env.DB);
@@ -47,10 +47,10 @@ export class GenerationRouter {
       console.warn('No AI provider configured - service will not work properly');
     }
     
-    this.storyService = new StoryService(this.aiService, this.db);
+    this.storyManager = new StoryManager(this.aiService, this.db);
   }
 
-  async route(request: Request): Promise<Response | null> {
+  async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
     logRequest(request);
 
     const url = new URL(request.url);
@@ -61,14 +61,14 @@ export class GenerationRouter {
     const sessionMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact$/);
     if (sessionMatch && method === 'POST') {
         const sessionId = sessionMatch[1];
-        return await this.interactWithStory(request, sessionId);
+        return await this.interactWithStory(request, sessionId, ctx);
     }
 
     return null; // Route not handled by this router
   }
 
   // Interaction with JSON response
-  private async interactWithStory(request: Request, sessionId: string): Promise<Response> {
+  private async interactWithStory(request: Request, sessionId: string, ctx?: ExecutionContext): Promise<Response> {
     try {
       if (!isValidSessionId(sessionId)) {
         return createErrorResponse('Invalid session ID format', 400);
@@ -114,12 +114,13 @@ export class GenerationRouter {
       // Get recent conversation context
       const recentMessages = await this.db.getRecentSessionMessages(sessionId, 10);
 
-      // Generate AI response
-      const narratorResponse = await this.storyService.generateResponse(
+      // Generate AI response using new chapter-based system
+      const narratorResponse = await this.storyManager.processUserMessage(
+        sessionId,
         userMessage,
-        session,
         world,
-        recentMessages
+        recentMessages,
+        ctx
       );
 
       // Save narrator response

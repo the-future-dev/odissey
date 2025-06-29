@@ -58,8 +58,8 @@ export default {
 			// Get cached router (only creates new one if needed)
 			const router = getCachedRouter(env);
 			
-			// Route the request
-			const response = await router.route(request);
+			// Route the request with ExecutionContext
+			const response = await router.route(request, ctx);
 			
 			// Ensure all responses have CORS headers
 			const headers = new Headers(response.headers);

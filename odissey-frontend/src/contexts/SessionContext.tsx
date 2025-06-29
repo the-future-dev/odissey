@@ -51,13 +51,9 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       setCurrentSession(session);
       
-      const welcomeMessage: Message = {
-        type: 'narrator',
-        text: 'Welcome to your adventure! What would you like to do?',
-        timestamp: new Date()
-      };
-      
-      setMessages([welcomeMessage]);
+      // Load initial messages from the backend (the new chapter-based system 
+      // will have already created the welcome message)
+      await loadSessionMessages(session.sessionId);
     } catch (error) {
       console.error('Failed to start session:', error);
       throw error;
@@ -137,6 +133,36 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       throw error;
     } finally {
       setIsInteracting(false);
+    }
+  };
+
+  // Load session messages from backend
+  const loadSessionMessages = async (sessionId: string) => {
+    try {
+      const token = await TokenManager.getValidToken();
+      const response = await fetch(`${API_URL}/sessions/${sessionId}/messages`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load messages: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const fetchedMessages: Message[] = data.messages.map((msg: any) => ({
+        type: msg.type,
+        text: msg.content,
+        timestamp: new Date(msg.created_at)
+      }));
+
+      setMessages(fetchedMessages);
+    } catch (error) {
+      console.error('Failed to load session messages:', error);
+      // If loading fails, keep existing messages or set empty array
+      setMessages([]);
     }
   };
 

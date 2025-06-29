@@ -19,6 +19,7 @@ export interface Session {
   id: string;
   user_id: number;
   world_id: string;
+  story_state: string | null;
   created_at: string;
   updated_at: string;
 }

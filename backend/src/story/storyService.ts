@@ -4,6 +4,16 @@ import { TextToTextRequest } from '../ai/interfaces';
 import { DatabaseService } from '../database/database';
 import { Logger, createTimer, getElapsed } from '../utils';
 
+interface StoryChapter {
+  id: string;
+  title: string;
+  description?: string;
+  setting?: string;
+  plot?: string;
+  characters?: string[];
+  worldId: string;
+}
+
 export class StoryService {
   private aiService: AIServiceManager;
   private db: DatabaseService;
@@ -12,10 +22,7 @@ export class StoryService {
     this.aiService = aiService;
     this.db = db;
     
-    Logger.info('StoryService', {
-      component: 'StoryService',
-      operation: 'INIT'
-    });
+    // StoryService initialized
   }
 
   /**
@@ -39,7 +46,13 @@ export class StoryService {
       }
     };
 
-    Logger.info('Starting story response generation', context);
+    // Starting story response generation
+    Logger.info(`StoryService generating interaction with ${recentMessages.length} messages`, {
+      component: 'StoryService',
+      operation: 'GENERATE_RESPONSE',
+      sessionId: session.id,
+      metadata: { messageCount: recentMessages.length }
+    });
 
     try {
       // Generate dynamic system prompt
@@ -64,6 +77,71 @@ export class StoryService {
       return response.content;
     } catch (error) {
       Logger.error('Response generation failed', error, {
+        ...context,
+        duration: getElapsed(timer)
+      });
+      throw new Error('AI service is temporarily unavailable. Please check your API configuration and try again.');
+    }
+  }
+
+  /**
+   * Generate a narrative response within a specific chapter context
+   */
+  async generateResponseInChapter(
+    userMessage: string,
+    session: Session,
+    world: World,
+    chapter: StoryChapter,
+    recentMessages: Message[]
+  ): Promise<string> {
+    const timer = createTimer();
+    const context = {
+      component: 'StoryService',
+      operation: 'GENERATE_RESPONSE_IN_CHAPTER',
+      sessionId: session.id,
+      metadata: {
+        worldId: world.id,
+        chapterId: chapter.id,
+        messageLength: userMessage.length,
+        historyCount: recentMessages.length
+      }
+    };
+
+    // Starting chapter-based story response generation
+    Logger.info(`StoryService generating chapter-based interaction with ${recentMessages.length} messages`, {
+      component: 'StoryService',
+      operation: 'GENERATE_RESPONSE_IN_CHAPTER',
+      sessionId: session.id,
+      metadata: { 
+        messageCount: recentMessages.length,
+        chapterId: chapter.id,
+        chapterTitle: chapter.title
+      }
+    });
+
+    try {
+      // Generate dynamic system prompt with chapter context
+      const systemPrompt = this.generateChapterSystemPrompt(world, chapter);
+
+      // Build conversation messages for AI
+      const messages = this.buildConversationMessages(
+        systemPrompt,
+        userMessage,
+        recentMessages
+      );
+
+      // Generate AI response
+      const aiRequest: TextToTextRequest = {
+        messages,
+        temperature: 0.1,
+        maxTokens: 5000
+      };
+
+      const response = await this.generateWithRetry(aiRequest, 3, context);
+      
+      return response.content;
+    } catch (error) {
+      Logger.error('Chapter-based response generation failed', error, {
         ...context,
         duration: getElapsed(timer)
       });
@@ -98,6 +176,41 @@ FORMAT - at the end of the message use a numbered list with format:
   }
 
   /**
+   * Generate a system prompt with chapter context
+   */
+  private generateChapterSystemPrompt(world: World, chapter: StoryChapter): string {
+    return `You are a narrator. Your objective is to shape the story "${world.title}", where the user is the main character.
+You are the omniscient narrator: your objective is to shape the best story for the user. You only don't know how the user will act in your story!
+
+WORLD DESCRIPTION:
+${world.description || ''}
+
+CHAPTER CONTEXT:
+Title: ${chapter.title}
+${chapter.description ? `Description: ${chapter.description}` : ''}
+${chapter.setting ? `Setting: ${chapter.setting}` : ''}
+${chapter.plot ? `Plot Elements: ${chapter.plot}` : ''}
+${chapter.characters && chapter.characters.length > 0 ? `Key Characters: ${chapter.characters.join(', ')}` : ''}
+
+TASK - RESPONSE STRUCTURE REQUIREMENTS:
+- 200-300 words per response
+- Use simple worlds, a friendly tone and a simple phrase format.
+- Incorporate the chapter's setting, plot elements, and characters naturally into the narrative
+- Add new elements of the narration gradually - NOT ALL AT ONCE
+- Structure each response to generally include:
+  1. SCENE SETTING: describe the scene and/or the situation, incorporating chapter context.
+  2. EVENT: Something happening to get the user interested, related to the chapter's plot.
+  3. CHOICES: Give 3 options the user can pick from, considering the chapter's context.
+
+FORMAT - at the end of the message use a numbered list with format:
+\`\`\`choice
+1) ... 
+2) ... 
+3) ... 
+\`\`\``;
+  }
+
+  /**
    * Generate response with retry logic
    */
   private async generateWithRetry(
@@ -109,10 +222,7 @@ FORMAT - at the end of the message use a numbered list with format:
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        Logger.info(`AI generation attempt ${attempt}/${maxRetries}`, {
-          ...context,
-          metadata: { ...context.metadata, attempt }
-        });
+        // AI generation attempt
         
         const response = await this.aiService.generateText(request);
 
@@ -127,10 +237,7 @@ FORMAT - at the end of the message use a numbered list with format:
 
         if (attempt < maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-          Logger.info(`Retrying in ${delay}ms...`, {
-            ...context,
-            metadata: { ...context.metadata, attempt, retryDelay: delay }
-          });
+          // Retrying generation
           await this.sleep(delay);
         }
       }
