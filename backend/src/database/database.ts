@@ -69,6 +69,19 @@ export class DatabaseService {
     return result.results || [];
   }
 
+  async createWorld(id: string, title: string, description?: string): Promise<World> {
+    const result = await this.db
+      .prepare('INSERT INTO worlds (id, title, description) VALUES (?, ?, ?) RETURNING *')
+      .bind(id, title, description || null)
+      .first<World>();
+    
+    if (!result) {
+      throw new Error('Failed to create world');
+    }
+    
+    return result;
+  }
+
   // === SESSION MANAGEMENT ===
 
   async createSession(sessionId: string, userId: number, worldId: string): Promise<Session> {

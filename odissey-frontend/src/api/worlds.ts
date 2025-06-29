@@ -26,4 +26,17 @@ export const getWorldById = async (token: string, worldId: string): Promise<Worl
     }
   });
   return handleResponse(response);
+};
+
+// Create a new world
+export const createWorld = async (token: string, title: string, description?: string): Promise<World> => {
+  const response = await fetch(`${API_URL}/worlds`, {
+    method: 'POST',
+    headers: { 
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ title, description })
+  });
+  return handleResponse(response);
 }; 

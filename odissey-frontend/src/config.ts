@@ -21,7 +21,7 @@ const configs: Record<string, Config> = {
 const isDevelopment = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV === 'development';
 
 // Manual override for easy testing - change this line to switch environments
-const FORCE_ENVIRONMENT: 'development' | 'production' | null = 'development';
+const FORCE_ENVIRONMENT: 'development' | 'production' | null = 'production';
 
 // Final environment determination
 const ENVIRONMENT = FORCE_ENVIRONMENT || (isDevelopment ? 'development' : 'production');
@@ -32,5 +32,5 @@ export const API_URL = configs[ENVIRONMENT].apiUrl;
 export const getEnvironmentInfo = () => ({
   environment: ENVIRONMENT,
   apiUrl: API_URL,
-  isDevelopment: ENVIRONMENT === 'development'
+  isDevelopment: isDevelopment
 }); 

@@ -26,6 +26,10 @@ export class WorldsRouter {
       return await this.getWorlds(request);
     }
 
+    if (pathname === '/worlds' && method === 'POST') {
+      return await this.createWorld(request);
+    }
+
     const worldMatch = pathname.match(/^\/worlds\/([^\/]+)$/);
     if (worldMatch && method === 'GET') {
       const worldId = worldMatch[1];
@@ -42,6 +46,33 @@ export class WorldsRouter {
     } catch (error) {
       console.error('Error fetching worlds:', error);
       return createErrorResponse('Failed to fetch worlds', 500);
+    }
+  }
+
+  private async createWorld(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { title?: unknown; description?: unknown };
+      const { title, description } = body;
+
+      if (!title || typeof title !== 'string' || title.trim().length === 0) {
+        return createErrorResponse('Title is required and must be a non-empty string', 400);
+      }
+
+      if (description && typeof description !== 'string') {
+        return createErrorResponse('Description must be a string', 400);
+      }
+
+      // Generate a unique ID based on the title
+      const id = title.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '-')
+        .substring(0, 50) + '-' + Date.now();
+
+      const world = await this.db.createWorld(id, title.trim(), description && typeof description === 'string' ? description.trim() : undefined);
+      return createJsonResponse(world);
+    } catch (error) {
+      console.error('Error creating world:', error);
+      return createErrorResponse('Failed to create world', 500);
     }
   }
 

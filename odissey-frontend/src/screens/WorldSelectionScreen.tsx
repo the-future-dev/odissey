@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, World } from '../types';
-import { TokenManager, getAllWorlds } from '../api';
+import { TokenManager, getAllWorlds, createWorld } from '../api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WorldSelection'>;
 
@@ -10,6 +10,10 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newWorldTitle, setNewWorldTitle] = useState('');
+  const [newWorldDescription, setNewWorldDescription] = useState('');
 
   useEffect(() => {
     loadWorlds();
@@ -38,6 +42,44 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
     });
   };
 
+  const handleCreateWorld = async () => {
+    if (!newWorldTitle.trim()) {
+      Alert.alert('Error', 'Please enter a title for your world.');
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+      const token = await TokenManager.getValidToken();
+      await createWorld(token, newWorldTitle.trim(), newWorldDescription.trim() || undefined);
+      
+      // Reset form and close modal
+      setNewWorldTitle('');
+      setNewWorldDescription('');
+      setIsCreateModalVisible(false);
+      
+      // Reload worlds to show the new one
+      await loadWorlds();
+    } catch (error) {
+      console.error('Failed to create world:', error);
+      Alert.alert('Error', 'Failed to create world. Please try again.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const openCreateModal = () => {
+    setNewWorldTitle('');
+    setNewWorldDescription('');
+    setIsCreateModalVisible(true);
+  };
+
+  const closeCreateModal = () => {
+    setNewWorldTitle('');
+    setNewWorldDescription('');
+    setIsCreateModalVisible(false);
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -64,8 +106,15 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Choose Your Adventure</Text>
-        <Text style={styles.subtitle}>Select a world to begin your story</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Choose Your Adventure</Text>
+            <Text style={styles.subtitle}>Select a world to begin your story</Text>
+          </View>
+          <TouchableOpacity style={styles.addButton} onPress={openCreateModal}>
+            <Text style={styles.addButtonText}>+</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView 
@@ -92,6 +141,62 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {/* Create World Modal */}
+      <Modal
+        visible={isCreateModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeCreateModal}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={closeCreateModal}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Create New World</Text>
+            <TouchableOpacity 
+              onPress={handleCreateWorld} 
+              disabled={isCreating || !newWorldTitle.trim()}
+              style={[styles.modalSaveButton, (!newWorldTitle.trim() || isCreating) && styles.modalSaveButtonDisabled]}
+            >
+              <Text style={[styles.modalSaveText, (!newWorldTitle.trim() || isCreating) && styles.modalSaveTextDisabled]}>
+                {isCreating ? 'Creating...' : 'Create'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Title *</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newWorldTitle}
+                onChangeText={setNewWorldTitle}
+                placeholder="Enter world title"
+                placeholderTextColor="#94A3B8"
+                maxLength={100}
+                editable={!isCreating}
+              />
+            </View>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Description</Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                value={newWorldDescription}
+                onChangeText={setNewWorldDescription}
+                placeholder="Describe your world..."
+                placeholderTextColor="#94A3B8"
+                multiline
+                numberOfLines={4}
+                maxLength={500}
+                editable={!isCreating}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -114,6 +219,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerText: {
+    flex: 1,
   },
   title: {
     fontSize: 28,
@@ -191,5 +303,79 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: 'white',
     fontWeight: '600',
+  },
+  addButton: {
+    backgroundColor: '#8B5CF6',
+    padding: 12,
+    borderRadius: 8,
+  },
+  addButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    paddingTop: 60,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: '#64748B',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+  },
+  modalSaveButton: {
+    backgroundColor: '#8B5CF6',
+    padding: 12,
+    borderRadius: 8,
+  },
+  modalSaveButtonDisabled: {
+    backgroundColor: '#E2E8F0',
+  },
+  modalSaveText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  modalSaveTextDisabled: {
+    color: '#94A3B8',
+  },
+  modalContent: {
+    padding: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+  },
+  textArea: {
+    height: 120,
   },
 }); 
