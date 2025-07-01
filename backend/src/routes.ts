@@ -30,7 +30,7 @@ export class ApiRouter {
     this.healthRouter = new HealthRouter();
   }
 
-  async route(request: Request): Promise<Response> {
+  async route(request: Request, ctx?: ExecutionContext): Promise<Response> {
     logRequest(request);
 
     try {
@@ -44,7 +44,7 @@ export class ApiRouter {
       ];
 
       for (const router of routers) {
-        const response = await router.route(request);
+        const response = await router.route(request, ctx);
         if (response) {
           return response;
         }

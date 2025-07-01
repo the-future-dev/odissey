@@ -17,7 +17,7 @@ export class AuthRouter {
     this.db = new DatabaseService(env.DB);
   }
 
-  async route(request: Request): Promise<Response | null> {
+  async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
     logRequest(request);
     
     const url = new URL(request.url);

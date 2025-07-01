@@ -52,8 +52,6 @@ export class GeminiProvider implements AIProvider {
         };
       }
 
-      console.log(`Calling Gemini API with model: ${this.model}`);
-      
       const response = await fetch(
         `${this.baseUrl}/models/${this.model}:generateContent?key=${this.apiKey}`,
         {
