@@ -1,2 +1,2 @@
 export { StoryService } from './storyService';
-export { StoryDirectorService } from './storyDirectorService'; 
+export { MPCStoryAgents } from './mpcAgents'; 

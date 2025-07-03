@@ -134,11 +134,14 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
-  const handleQuickSend = async (optionText: string) => {
+  const handleQuickSend = async (optionNumber: number, optionText: string) => {
     if (isInteracting) return;
 
+    // Send the choice number in a format the backend can detect
+    const choiceMessage = `${optionNumber}`;
+
     try {
-      await sendMessage(optionText);
+      await sendMessage(choiceMessage);
     } catch (error) {
       console.error('Failed to send option:', error);
     }
@@ -258,7 +261,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
             <TouchableOpacity
               key={option.number}
               style={styles.optionButton}
-              onPress={() => handleQuickSend(option.text)}
+              onPress={() => handleQuickSend(option.number, option.text)}
               activeOpacity={0.7}
             >
               <View style={styles.optionContent}>
