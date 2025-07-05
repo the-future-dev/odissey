@@ -43,12 +43,12 @@ export class GenerationRouter {
     if (env.GEMINI_API_KEY) {
       const geminiProvider = new GeminiProvider({
         apiKey: env.GEMINI_API_KEY,
-        model: 'gemini-2.5-flash'
+        model: 'gemini-2.0-flash'
       });
       this.aiService.setProvider(geminiProvider);
       Logger.info('AI provider configured', {
         ...context,
-        metadata: { provider: 'Gemini', model: 'gemini-2.5-flash' }
+        metadata: { provider: 'Gemini', model: 'gemini-2.0-flash' }
       });
     } else if (env.HUGGINGFACE_API_KEY && env.HUGGINGFACE_API_KEY.startsWith('hf_')) {
       const huggingFaceProvider = new HuggingFaceProvider({
