@@ -53,8 +53,7 @@ export class MPCStoryAgents {
       // Generate initial chapters synchronously - user needs the first chapter to start
       const predictorOutput = await this.storyPredictor.predictFutureChapters({
         storyModel,
-        historyChapters: [],
-        currentChapter: null
+        historyChapters: []
       });
 
       // Store chapters and set first as current
@@ -253,8 +252,7 @@ export class MPCStoryAgents {
         
         const predictorOutput = await this.storyPredictor.predictFutureChapters({
           storyModel,
-          historyChapters: updatedHistory,
-          currentChapter: newCurrent
+          historyChapters: updatedHistory
         });
 
         // Store new future chapters

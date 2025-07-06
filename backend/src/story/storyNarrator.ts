@@ -39,19 +39,22 @@ export class StoryNarrator {
 Your role is to:
 1. Create an immersive narrative response: the user is LIVING the story!
 2. In your narrative, you should follow this instruction: "${input.optimizerOutput.decomposition}"
-3. Always end with exactly 3 choices for what the user can do next - be creative and engage the user!
+3. End by prompting the user with three choices to engage the user and further develop the story:
+for example you can propose to expand the instruction: "${input.optimizerOutput.decomposition}" or propose interesting evolvements or actions that would be natural to take in this environment.
 
 Narrator Style:
 - Write in a way that draws the user deeper into the story
 - Use the present tense
 - Use simple worlds, a friendly tone and a simple phrase format
+- **NEVER** start by repeating what the user has just chosen to do!
+- **NEVER** speak for the user inside your narration. ANY time the user is involved in a dialogue, make him DIRECTLY speak in it - prompt options of phrases to say!
 
-Format your response as:
-NARRATIVE: [Your immersive response describing what happens next]
-CHOICES:
-1. [Choice 1]
-2. [Choice 2]
-3. [Choice 3]`;
+FORMAT - at the end of the message use this exact format:
+**Choose your next action:**
+1. [choice 1]
+2. [choice 2]
+3. [choice 3]
+`;
 
     // Build conversation history with proper message format
     const conversationMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -79,34 +82,6 @@ CHOICES:
     try {
       const response = await this.aiService.generateText(request);
       
-      // Extract narrative and choices
-      const content = response.content;
-      const narrativeMatch = content.match(/NARRATIVE:\s*([\s\S]*?)(?=\n\s*CHOICES:)/);
-      const choicesMatch = content.match(/CHOICES:\s*([\s\S]*)/);
-      
-      if (!narrativeMatch || !choicesMatch) {
-        throw new Error('Could not extract narrative and choices from response');
-      }
-      
-      const narrative = narrativeMatch[1].trim();
-      const choicesText = choicesMatch[1].trim();
-      
-      // Parse choices
-      const choices = choicesText
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.match(/^\d+\./))
-        .map(line => line.replace(/^\d+\.\s*/, ''));
-      
-      if (choices.length !== 3) {
-        throw new Error('Expected exactly 3 choices');
-      }
-
-      const output: NarratorOutput = {
-        response: narrative,
-        choices
-      };
-
       // Log what goes to the narrator
       console.log('\n🎬 NARRATOR INPUT:');
       console.log('='.repeat(60));
@@ -116,12 +91,67 @@ CHOICES:
       console.log(`💬 Conversation history: ${input.recentMessages.length} messages`);
       console.log('='.repeat(60));
 
-      Logger.info(`✅ Narrative generated successfully`);
-
-      return output;
+      // Extract narrative and choices with robust parsing
+      const content = response.content;
+      
+      // Log the raw response for debugging
+      console.log('\n🔍 RAW AI RESPONSE:');
+      console.log('='.repeat(60));
+      console.log(content);
+      console.log('='.repeat(60));
+      
+      return this.parseNarrativeResponse(content);
     } catch (error) {
       Logger.error(`❌ Failed to generate narrative: ${error instanceof Error ? error.message : String(error)}`);
       throw new Error('Failed to generate narrative');
     }
   }
+
+  /**
+   * Parse narrative response using the actual AI model format
+   */
+  private parseNarrativeResponse(content: string): NarratorOutput {
+    // The AI model consistently outputs this format:
+    // [narrative text]
+    // **Choose your next action:**
+    // 1. [choice 1]
+    // 2. [choice 2]
+    // 3. [choice 3]
+    
+    // Split on the choice header
+    const parts = content.split(/\*\*Choose your next action:\*\*/i);
+    
+    if (parts.length !== 2) {
+      Logger.error(`❌ Failed to parse narrative - expected format not found. Content: ${content}`);
+      throw new Error('Could not extract narrative and choices from response');
+    }
+    
+    // Extract narrative (everything before the choice header)
+    const narrative = parts[0].trim();
+    
+    // Extract choices (everything after the choice header)
+    const choicesText = parts[1].trim();
+    
+    // Parse numbered choices (1., 2., 3.)
+    const choiceLines = choicesText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.match(/^\d+\./))
+      .map(line => line.replace(/^\d+\.\s*/, '').trim())
+      .filter(choice => choice.length > 0);
+    
+    if (choiceLines.length !== 3) {
+      Logger.error(`❌ Failed to parse choices - expected 3 choices, got ${choiceLines.length}. Content: ${content}`);
+      throw new Error('Could not extract exactly 3 choices from response');
+    }
+    
+    if (!narrative) {
+      Logger.error(`❌ Failed to parse narrative - narrative is empty. Content: ${content}`);
+      throw new Error('Narrative is empty');
+    }
+    
+    Logger.info(`✅ Narrative parsed successfully`);
+    return { response: narrative, choices: choiceLines };
+  }
+
+
 } 

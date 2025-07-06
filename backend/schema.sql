@@ -153,3 +153,37 @@ Upon his return to the front, Frederic experiences the horrific realities of the
 
 **Intended Emotional Impact:** Hemingway aims to evoke a profound sense of pathos, melancholy, and the tragic beauty of human resilience in the face of immense suffering. The reader is meant to feel the raw emotional intensity of love and loss, the crushing weight of war, and the quiet despair of a world where even the purest connections can be shattered. The novel leaves a lasting impression of the fragility of happiness and the enduring, often solitary, nature of grief.'
 );
+
+INSERT OR IGNORE INTO worlds (id, title, description) VALUES (
+  'family-guy',
+  'Family Guy',
+  'Family Guy is a long-running, Emmy Award-winning American animated sitcom created by Seth MacFarlane, renowned for its irreverent humor, cutaway gags, and sharp social commentary. Set in the fictional city of Quahog, Rhode Island, the series centers on the dysfunctional adventures of the Griffin family: Peter, the well-meaning but dim-witted patriarch; Lois, his more intelligent and often exasperated wife; their three children—Meg, the perpetually bullied and overlooked eldest; Chris, the unintelligent and overweight middle child; and Stewie, the evil genius infant with a sophisticated vocabulary and a penchant for world domination; along with Brian, the family''s cultured, anthropomorphic, martini-swilling dog.
+
+The plot of individual episodes typically revolves around the Griffins'' often absurd daily lives, which quickly escalate into outlandish and surreal scenarios. These scenarios frequently break from traditional narrative structure, incorporating non-sequitur cutaway gags, musical numbers, and meta-references that comment on pop culture, politics, and the show itself. While a loose plot drives each episode, the emphasis is heavily placed on rapid-fire jokes, character interactions, and satirical commentary rather than intricate storytelling arcs across seasons, though character dynamics and certain running gags do evolve over time.
+
+**Themes:** The series tackles a wide array of themes, often through satire and parody:
+* **The American Family:** A deconstruction and often brutal satire of the traditional American sitcom family, exposing its absurdities and dysfunctions.
+* **Pop Culture and Media Satire:** Constant referencing and lampooning of movies, television shows, music, and celebrity culture.
+* **Social and Political Commentary:** Often takes aim at controversial topics, political figures, societal norms, and contemporary issues, frequently using shock humor and exaggeration to make its points.
+* **Dysfunction and Absurdity:** Explores the chaotic and often illogical nature of human relationships and everyday life, pushed to extreme comedic limits.
+* **Identity and Belonging:** Particularly through characters like Meg and Stewie, the show touches on themes of searching for acceptance and purpose, albeit with a dark comedic twist.
+
+**Settings:** Primarily set in the suburban landscape of Quahog, Rhode Island, with frequent ventures into various fantastical or real-world locations as dictated by the show''s often outlandish plotlines and cutaways. Key locations include the Griffin home, the Drunken Clam pub, and James Woods High School.
+
+**Style:** Family Guy''s distinctive comedic style is its most defining characteristic:
+* **Cutaway Gags:** Its most famous stylistic device, where the narrative suddenly diverges into a brief, often surreal and unrelated scene triggered by a character''s thought or comment.
+* **Meta-humor:** Frequent breaking of the fourth wall and self-referential jokes about the show''s own production, status, and reception.
+* **Black Comedy and Shock Humor:** Utilizes offensive, controversial, and often taboo subjects for comedic effect, pushing boundaries with its jokes.
+* **Musical Numbers:** Features frequent and elaborate musical sequences, often parodies of Broadway or popular songs.
+* **Non-sequiturs:** Jokes and situations that lack logical connection to the preceding narrative, contributing to the show''s anarchic tone.
+
+**Voice of the Characters/Narrative:** The series does not have a single narrator but instead relies on the distinct and often exaggerated personalities of its main characters. Peter Griffin often serves as the unwitting catalyst for many plots, while Stewie and Brian frequently provide more sophisticated, cynical, or intellectual commentary, often acting as a comedic duo. The humor largely comes from the clash of these personalities and their often inappropriate reactions to situations.
+
+**Conflict Sources:**
+* **Interpersonal Dysfunction:** The internal conflicts within the Griffin family, driven by their individual eccentricities and clashes of personality.
+* **Man vs. Absurdity:** The characters frequently find themselves in bizarre, unrealistic situations that defy logic.
+* **Social/Political Commentary:** The show often sets up conflicts between its characters and various societal norms, political ideologies, or celebrity behaviors, which it then satirizes.
+* **External Forces:** While less common for long-term arcs, external threats or challenges sometimes drive individual episodes, often quickly resolving in ridiculous ways.
+
+**Intended Emotional Impact:** Family Guy aims primarily to entertain through laughter, shock, and satire. It seeks to provoke thought on contemporary issues by presenting them through an exaggerated, often offensive, and highly comedic lens. While not aiming for deep emotional resonance in the traditional dramatic sense, it can evoke feelings of surprise, amusement, and sometimes discomfort, prompting viewers to question societal norms and the absurdities of modern life.'
+)

@@ -2,12 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Animated, Image } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { RootStackParamList } from '../types';
 import { useSession } from '../contexts/SessionContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Session'>;
-
-
 
 export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   const { worldId, worldTitle } = route.params;
@@ -33,8 +32,6 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     initializeSession();
   }, [worldId]);
 
-
-
   // Handle thinking animation
   useEffect(() => {
     if (isInteracting) {
@@ -55,8 +52,6 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     
     return () => clearTimeout(timer);
   }, [messages]);
-
-
 
   const startThinkingAnimation = () => {
     const animate = () => {
@@ -123,6 +118,25 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   };
 
+  const handleSwipeGesture = (event: any) => {
+    const { nativeEvent } = event;
+    
+    if (nativeEvent.state === State.END) {
+      const { translationX, velocityX } = nativeEvent;
+      
+      // Check for right-to-left swipe (negative translation and velocity)
+      if (translationX < -100 && velocityX < -500) {
+        // Navigate to Chapters Screen if we have a session
+        if (currentSession) {
+          navigation.navigate('Chapters', { 
+            sessionId: currentSession.sessionId, 
+            worldTitle: worldTitle 
+          });
+        }
+      }
+    }
+  };
+
   // Loading state
   if (isSessionLoading) {
     return (
@@ -159,166 +173,180 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="chevron-back" size={24} color="#8B5CF6" />
-          <Text style={styles.backButtonText}>Worlds</Text>
-        </TouchableOpacity>
-        <Text style={styles.worldTitle} numberOfLines={1}>
-          {worldTitle}
-        </Text>
-        <TouchableOpacity 
-          style={styles.resetButton} 
-          onPress={handleResetWorld}
-          disabled={isInteracting}
-        >
-          <Ionicons name="refresh" size={16} color="white" />
-        </TouchableOpacity>
-      </View>
-
-      <KeyboardAvoidingView 
-        style={styles.content} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        {/* Messages */}
-        <ScrollView 
-          ref={scrollViewRef}
-          style={styles.messagesContainer} 
-          contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {messages.map((message, index) => (
-            <View 
-              key={index}
-              ref={(ref) => { messageRefs.current[index] = ref; }}
-              style={[
-                styles.messageContainer, 
-                message.type === 'user' ? styles.userMessage : 
-                message.type === 'choice' ? styles.choiceMessage : styles.narratorMessage,
-                // Add special spacing for choices that follow narrator messages
-                message.type === 'choice' && index > 0 && messages[index - 1]?.type === 'narrator' ? styles.firstChoice : {},
-                // Reduce spacing for subsequent choices
-                message.type === 'choice' && index > 0 && messages[index - 1]?.type === 'choice' ? styles.subsequentChoice : {}
-              ]}
+    <PanGestureHandler onGestureEvent={handleSwipeGesture} onHandlerStateChange={handleSwipeGesture}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="chevron-back" size={24} color="#8B5CF6" />
+            <Text style={styles.backButtonText}>Worlds</Text>
+          </TouchableOpacity>
+          <Text style={styles.worldTitle} numberOfLines={1}>
+            {worldTitle}
+          </Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              style={styles.chaptersButton} 
+              onPress={() => currentSession && navigation.navigate('Chapters', { 
+                sessionId: currentSession.sessionId, 
+                worldTitle: worldTitle 
+              })}
+              disabled={!currentSession}
             >
-              {message.type === 'choice' ? (
-                <TouchableOpacity
-                  style={[
-                    styles.choiceContent,
-                    isInteracting && styles.choiceContentDisabled
-                  ]}
-                  onPress={() => handleQuickSend(message.choiceNumber!, message.text)}
-                  disabled={isInteracting}
-                  activeOpacity={isInteracting ? 1 : 0.6}
-                >
-                  <View style={[
-                    styles.choiceNumberContainer,
-                    isInteracting && styles.choiceNumberContainerDisabled
-                  ]}>
-                    <Text style={[
-                      styles.choiceNumber,
-                      isInteracting && styles.choiceNumberDisabled
-                    ]}>
-                      {message.choiceNumber}
-                    </Text>
-                  </View>
-                  <Text style={[
-                    styles.choiceText,
-                    isInteracting && styles.choiceTextDisabled
-                  ]}>
-                    {message.text}
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <Text style={[
-                    styles.messageText,
-                    message.type === 'user' ? styles.userMessageText : styles.narratorMessageText
-                  ]}>
-                    {message.text}
-                  </Text>
-                  <Text style={styles.messageTime}>
-                    {message.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || ''}
-                  </Text>
-                </>
-              )}
-            </View>
-          ))}
+              <Ionicons name="book-outline" size={16} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.resetButton} 
+              onPress={handleResetWorld}
+              disabled={isInteracting}
+            >
+              <Ionicons name="refresh" size={16} color="white" />
+            </TouchableOpacity>
+          </View>
+        </View>
 
-          {/* Show thinking indicator when processing */}
-          {isInteracting && (
-            <View style={[styles.messageContainer, styles.narratorMessage, styles.thinkingMessage]}>
-              <View style={styles.thinkingContainer}>
-                <View style={styles.thinkingDotContainer}>
-                  <Animated.View style={[styles.thinkingDot, { opacity: dotsOpacity }]} />
-                  <Animated.View style={[styles.thinkingDot, { opacity: dotsOpacity }]} />
-                  <Animated.View style={[styles.thinkingDot, { opacity: dotsOpacity }]} />
-                </View>
-                <Text style={styles.thinkingText}>Thinking...</Text>
-              </View>
-            </View>
-          )}
-        </ScrollView>
-
-        {/* Chat Input Section */}
-        <View style={styles.optionsContainer}>
+        <KeyboardAvoidingView 
+          style={styles.content} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          {/* Messages */}
           <ScrollView 
+            ref={scrollViewRef}
+            style={styles.messagesContainer} 
+            contentContainerStyle={styles.messagesContent}
             showsVerticalScrollIndicator={false}
-            bounces={false}
-            style={styles.optionsScrollView}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Chat Input - Custom Action */}
-            <View style={styles.chatInputContainer}>
-              <View style={styles.chatInputContent}>
-                <View style={styles.chatIconContainer}>
-                  <Ionicons name="create-outline" size={20} color="#8B5CF6" />
-                </View>
-                <View style={styles.chatInputWrapper}>
-                  <TextInput
+            {messages.map((message, index) => (
+              <View 
+                key={index}
+                ref={(ref) => { messageRefs.current[index] = ref; }}
+                style={[
+                  styles.messageContainer, 
+                  message.type === 'user' ? styles.userMessage : 
+                  message.type === 'choice' ? styles.choiceMessage : styles.narratorMessage,
+                  // Add special spacing for choices that follow narrator messages
+                  message.type === 'choice' && index > 0 && messages[index - 1]?.type === 'narrator' ? styles.firstChoice : {},
+                  // Reduce spacing for subsequent choices
+                  message.type === 'choice' && index > 0 && messages[index - 1]?.type === 'choice' ? styles.subsequentChoice : {}
+                ]}
+              >
+                {message.type === 'choice' ? (
+                  <TouchableOpacity
                     style={[
-                      styles.chatInput,
-                      isInteracting && styles.chatInputDisabled
+                      styles.choiceContent,
+                      isInteracting && styles.choiceContentDisabled
                     ]}
-                    value={inputText}
-                    onChangeText={setInputText}
-                    placeholder="Type your custom action..."
-                    placeholderTextColor="#9CA3AF"
-                    multiline
-                    maxLength={500}
-                    editable={!isInteracting}
-                    returnKeyType="send"
-                    onSubmitEditing={handleSendMessage}
-                    blurOnSubmit={false}
-                  />
-                  <TouchableOpacity 
-                    style={[
-                      styles.chatSendButton, 
-                      (!inputText.trim() || isInteracting) && styles.chatSendButtonDisabled
-                    ]}
-                    onPress={handleSendMessage}
-                    disabled={!inputText.trim() || isInteracting}
+                    onPress={() => handleQuickSend(message.choiceNumber!, message.text)}
+                    disabled={isInteracting}
+                    activeOpacity={isInteracting ? 1 : 0.6}
                   >
-                    <Ionicons 
-                      name="send" 
-                      size={18} 
-                      color={(!inputText.trim() || isInteracting) ? '#9CA3AF' : 'white'} 
-                    />
+                    <View style={[
+                      styles.choiceNumberContainer,
+                      isInteracting && styles.choiceNumberContainerDisabled
+                    ]}>
+                      <Text style={[
+                        styles.choiceNumber,
+                        isInteracting && styles.choiceNumberDisabled
+                      ]}>
+                        {message.choiceNumber}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.choiceText,
+                      isInteracting && styles.choiceTextDisabled
+                    ]}>
+                      {message.text}
+                    </Text>
                   </TouchableOpacity>
+                ) : (
+                  <>
+                    <Text style={[
+                      styles.messageText,
+                      message.type === 'user' ? styles.userMessageText : styles.narratorMessageText
+                    ]}>
+                      {message.text}
+                    </Text>
+                    <Text style={styles.messageTime}>
+                      {message.timestamp?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || ''}
+                    </Text>
+                  </>
+                )}
+              </View>
+            ))}
+
+            {/* Show thinking indicator when processing */}
+            {isInteracting && (
+              <View style={[styles.messageContainer, styles.narratorMessage, styles.thinkingMessage]}>
+                <View style={styles.thinkingContainer}>
+                  <View style={styles.thinkingDotContainer}>
+                    <Animated.View style={[styles.thinkingDot, { opacity: dotsOpacity }]} />
+                    <Animated.View style={[styles.thinkingDot, { opacity: dotsOpacity }]} />
+                    <Animated.View style={[styles.thinkingDot, { opacity: dotsOpacity }]} />
+                  </View>
+                  <Text style={styles.thinkingText}>Thinking...</Text>
                 </View>
               </View>
-            </View>
+            )}
           </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </View>
+
+          {/* Chat Input Section */}
+          <View style={styles.optionsContainer}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+              style={styles.optionsScrollView}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Chat Input - Custom Action */}
+              <View style={styles.chatInputContainer}>
+                <View style={styles.chatInputContent}>
+                  <View style={styles.chatIconContainer}>
+                    <Ionicons name="create-outline" size={20} color="#8B5CF6" />
+                  </View>
+                  <View style={styles.chatInputWrapper}>
+                    <TextInput
+                      style={[
+                        styles.chatInput,
+                        isInteracting && styles.chatInputDisabled
+                      ]}
+                      value={inputText}
+                      onChangeText={setInputText}
+                      placeholder="Type your custom action..."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      maxLength={500}
+                      editable={!isInteracting}
+                      returnKeyType="send"
+                      onSubmitEditing={handleSendMessage}
+                      blurOnSubmit={false}
+                    />
+                    <TouchableOpacity 
+                      style={[
+                        styles.chatSendButton, 
+                        (!inputText.trim() || isInteracting) && styles.chatSendButtonDisabled
+                      ]}
+                      onPress={handleSendMessage}
+                      disabled={!inputText.trim() || isInteracting}
+                    >
+                      <Ionicons 
+                        name="send" 
+                        size={18} 
+                        color={(!inputText.trim() || isInteracting) ? '#9CA3AF' : 'white'} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </PanGestureHandler>
   );
 };
 
@@ -367,6 +395,20 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     flex: 1,
     textAlign: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chaptersButton: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 40,
   },
   resetButton: {
     backgroundColor: '#EF4444',

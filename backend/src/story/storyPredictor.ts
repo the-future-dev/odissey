@@ -7,7 +7,6 @@ import { extractJsonFromResponse } from './mpcUtils';
 export interface PredictorInput {
   storyModel: StoryModel;
   historyChapters: Chapter[];
-  currentChapter: Chapter | null;
 }
 
 export interface PredictorOutput {
@@ -15,11 +14,15 @@ export interface PredictorOutput {
     title: string;
     description: string;
   }>;
+  nextChapter: {
+    title: string;
+    description: string;
+  };
 }
 
 /**
  * Story Predictor Agent - Computes future chapters based on story model and history
- * Role: Plan the story's future direction when chapters are completed
+ * Role: Plan the story's future direction at initialization or when chapters are completed
  */
 export class StoryPredictor {
   private aiService: AIServiceManager;
@@ -32,14 +35,45 @@ export class StoryPredictor {
    * Predict future chapters based on story progression
    */
   async predictFutureChapters(input: PredictorInput): Promise<PredictorOutput> {
-    const logTitle = input.currentChapter ? `"${input.currentChapter.title}"` : 'initial session setup';
-    Logger.info(`🔮 STORY PREDICTOR: Computing future chapters after ${logTitle}`);
+    const isInitialization = input.historyChapters.length === 0;
+    const logContext = isInitialization ? 'session initialization' : `completion of ${input.historyChapters.length} chapters`;
+    
+    Logger.info(`🔮 STORY PREDICTOR: Computing future chapters at ${logContext}`);
 
-    const systemPrompt = `You are the Story Predictor. Your job is to plan what chapters should come next in the story.
+    const systemPrompt = `You are an experienced narrator.
+Your job is to plan the future chapters of an interactive story.
 
-You work as part of a team that creates interactive stories. ${input.currentChapter ? 'When a chapter is completed, you need to figure out what chapters should come next to continue the story properly.' : 'You\'re setting up the initial chapter plan for a new story session.'}
+Your task:
+- Create a comprehensive roadmap of future chapters
+- Build the story towards the intended impact
+- Provide variety while maintaining genre consistency  
+- The user is the protagonist of this story
+- Generate as many chapters as needed to complete the story arc
+- Each chapter should be substantial enough for meaningful interaction
 
-Story Framework you're working with:
+IMPORTANT: Plan chapters that will come AFTER the current story state. If there are completed chapters, build upon them. If this is initialization, plan the beginning of the story.
+
+Format your response as a JSON array of chapter objects:
+[
+  {
+    "title": "Chapter Title (engaging but not spoiling)",
+    "description": "Detailed description of what happens in this chapter and its purpose in the story"
+  },
+  {
+    "title": "Chapter Title", 
+    "description": "Description of the next chapter's events and story progression"
+  }
+]`;
+
+    const historyContext = input.historyChapters.length > 0 
+      ? `Completed Chapters:\n${input.historyChapters.map(ch => `Chapter ${ch.chapter_number}: "${ch.title}"\n${ch.description}`).join('\n\n')}`
+      : 'No chapters completed yet - this is story initialization.';
+
+    const contextDescription = isInitialization 
+      ? 'Plan the opening chapters to begin this interactive adventure.'
+      : `Plan the next chapters that should follow after the ${input.historyChapters.length} completed chapters.`;
+
+    const userPrompt = `Story Configuration:
 - Core Theme: ${input.storyModel.core_theme_moral_message}
 - Genre & Style: ${input.storyModel.genre_style_voice}
 - Setting: ${input.storyModel.setting}
@@ -47,54 +81,12 @@ Story Framework you're working with:
 - Main Conflicts: ${input.storyModel.conflict_sources}
 - Intended Impact: ${input.storyModel.intended_impact}
 
-The user is the main character in this story. You're planning their future adventures to serve this story framework.
-
-Your role in the bigger picture:
-- You create the roadmap for future chapters
-- You ensure the story builds toward the intended impact
-- You provide variety and escalating stakes that match the genre and style
-- You set up meaningful choices that develop the protagonist
-
-Plan as many future chapters as needed to:
-1. Continue the story naturally from where it currently stands
-2. Build toward the story's intended impact and theme
-3. Create escalating tension and stakes appropriate to the genre
-4. Give the user meaningful choices and character growth
-5. Lead to a satisfying conclusion that delivers the intended impact
-
-Generate as many or as few chapters as the story naturally requires - don't limit yourself to a specific number. Some stories need more chapters, some need fewer.
-
-For each chapter, provide:
-- A compelling title that hints at what will happen
-- A description that explains the chapter's purpose and main events
-
-Write like you're planning an adventure for a friend, not like you're writing a textbook. Make each chapter sound exciting and important.
-
-Return your response as a JSON array:
-[
-  {
-    "title": "Chapter Title",
-    "description": "What happens in this chapter and why it matters"
-  }
-]`;
-
-    const historyContext = input.historyChapters.length > 0 
-      ? input.historyChapters.map(ch => `"${ch.title}": ${ch.description}`).join('\n')
-      : 'No previous chapters completed yet.';
-
-    const currentChapterContext = input.currentChapter 
-      ? `Current Chapter: "${input.currentChapter.title}"
-Description: ${input.currentChapter.description}
-
-Plan the next chapters that should come after the current chapter.`
-      : `This is initial story setup - plan the first chapters to begin the adventure.`;
-
-    const userPrompt = `${currentChapterContext}
-
-Previous Chapters Completed:
+Current Story State:
 ${historyContext}
 
-Make sure they build naturally toward the story's intended impact and give the user exciting challenges to face. Generate the right number of chapters for this story - no artificial limits.`;
+Task: ${contextDescription}
+
+Create engaging chapters that advance the story meaningfully while maintaining the established tone and direction.`;
 
     const request: TextToTextRequest = {
       messages: [
@@ -102,7 +94,7 @@ Make sure they build naturally toward the story's intended impact and give the u
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.7,
-      maxTokens: 2000
+      maxTokens: 10000
     };
 
     try {
@@ -121,20 +113,29 @@ Make sure they build naturally toward the story's intended impact and give the u
         }
       }
 
+      // Log the FULL chapters list as requested
+      console.log('\n🔮 STORY PREDICTOR - FULL CHAPTERS FORWARD:');
+      console.log('='.repeat(80));
+      console.log(`📍 Context: ${logContext}`);
+      console.log(`📚 Generated ${futureChapters.length} future chapters:`);
+      console.log('-'.repeat(80));
+      
+      futureChapters.forEach((chapter, index) => {
+        console.log(`📖 Chapter ${index + 1}: "${chapter.title}"`);
+        console.log(`   Description: ${chapter.description}`);
+        console.log('-'.repeat(80));
+      });
+      
+      console.log(`🎯 NEXT CHAPTER TO ACTIVATE: "${futureChapters[0].title}"`);
+      console.log(`   This will be the active chapter for user interaction.`);
+      console.log('='.repeat(80));
+
       const output: PredictorOutput = {
-        futureChapters
+        futureChapters,
+        nextChapter: futureChapters[0]
       };
 
-      // Log the predictor output
-      console.log('\n🔮 PREDICTOR OUTPUT:');
-      console.log('='.repeat(70));
-      futureChapters.forEach((chapter, index) => {
-        console.log(`📚 Chapter ${index + 1}: ${chapter.title}`);
-        console.log(`   └─ ${chapter.description}`);
-      });
-      console.log('='.repeat(70));
-
-      Logger.info(`✅ Predicted ${futureChapters.length} future chapters`);
+      Logger.info(`✅ Generated ${futureChapters.length} future chapters, next: "${futureChapters[0].title}"`);
 
       return output;
     } catch (error) {

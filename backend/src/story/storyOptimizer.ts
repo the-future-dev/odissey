@@ -35,8 +35,7 @@ export class StoryOptimizer {
   async optimizeStory(input: OptimizerInput): Promise<OptimizerOutput> {
     Logger.info(`🔧 STORY OPTIMIZER: Processing chapter "${input.currentChapter.title}"`);
 
-    const systemPrompt = `You are the Story Optimizer. Your job is to orchestrate the emotional rhythm of the story using sinusoidal pacing.
-
+    const systemPrompt = `You are the Story Optimizer. Your job is to orchestrate the emotional rhythm of the story using sinusoidal pacing and close the chapter after the climax.
 You work as part of a team that creates interactive stories. The user is the main character, and they just made a choice or took an action. Your role is to control the story's emotional intensity like a conductor controlling an orchestra.
 
 Your core responsibility: Create a SINUSOIDAL PACING PATTERN
@@ -46,41 +45,21 @@ Your core responsibility: Create a SINUSOIDAL PACING PATTERN
 - The climax pattern triggers chapter transitions
 
 SINUSOIDAL RHYTHM GUIDE:
-1. RISING PHASE (Build tension):
-- Introduce complications or obstacles
-- Create anticipation and uncertainty  
-- Escalate stakes gradually
-- Make the user feel increasing pressure
+1. INTRODUCTION: Introduce the chapter, perhaps more description, no hurry, let the user explore and make him enter the story
+2. RISING PHASE: Build tension, gradually but constantly, start the development of the chapter.
+3. CLIMAX: Time to get to the chapter core, act on it! Maximum engagement and involvement.
+4. RESOLUTION: Solve the suspense!
+5. TRANSITION: Put transition to YES and decomposition a way to transition to the next chapter!
 
-2. CLIMAX PHASE (Peak intensity):
-- Major confrontation or revelation
-- High-stakes decision points
-- Emotional peaks (fear, triumph, discovery)
-- User must act decisively
+- New characters in the chapter can be introduced at any time.
+- It is an interactive story therefore be flexible in how many back and forth the user has in each part of the rythm.
 
-3. RESOLUTION PHASE (Release tension):
-- Consequences of climax unfold
-- Brief moment of relief or understanding
-- Sets up transition to next chapter
-
-The user is the protagonist driving this rhythm through their choices. Your job is to respond with escalating or de-escalating intensity based on where we are in the cycle.
-
-Based on the current chapter and what the user just did, write ONE LINE that describes what should happen next. This should match the current emotional phase we need to be in.
-
-CHAPTER TRANSITION TRIGGERS (move to next chapter when):
-- We've completed a full cycle: reflection → tension → climax → resolution
-- A major story beat has reached its natural conclusion
-- The emotional intensity has peaked and resolved
-- Setting or conflict focus needs to fundamentally shift
-
-CONTINUE CURRENT CHAPTER when:
-- We're still building toward the climax
-- The current tension cycle isn't complete
-- User is in the middle of dealing with immediate consequences
+Based on the current chapter history, write ONE INPUT to describe what should happen next.
 
 Return your response as:
 DECOMPOSITION: [your one-line description matching the needed emotional intensityfor the single next narrator/user interaction]
-TRANSITION: [YES or NO]`;
+TRANSITION: [YES or NO]
+RYTHM: [INTRODUCTION or RISING or CLIMAX or RESOLUTION or TRANSITION]`;
 
     const userPrompt = `Current Chapter: "${input.currentChapter.title}"
 Chapter Description: ${input.currentChapter.description}
@@ -111,6 +90,7 @@ What should happen next?`;
       const content = response.content;
       const decompositionMatch = content.match(/DECOMPOSITION:\s*(.+)/);
       const transitionMatch = content.match(/TRANSITION:\s*(YES|NO)/);
+      const rhythmMatch = content.match(/RYTHM:\s*(INTRODUCTION|RISING|CLIMAX|RESOLUTION|TRANSITION)/);
       
       if (!decompositionMatch) {
         throw new Error('Could not extract decomposition from response');
@@ -118,6 +98,7 @@ What should happen next?`;
       
       const decomposition = decompositionMatch[1].trim();
       const shouldTransition = transitionMatch ? transitionMatch[1] === 'YES' : false;
+      const rhythm = rhythmMatch ? rhythmMatch[1] : '-UNDEFINED-';
 
       // Update the chapter with the new decomposition
       await this.db.updateChapterDecomposition(input.currentChapter.id, decomposition);
@@ -131,6 +112,7 @@ What should happen next?`;
       console.log('\n🎯 OPTIMIZER OUTPUT:');
       console.log('='.repeat(50));
       console.log(`📝 Decomposition: ${decomposition}`);
+      console.log(`📈 Rhythm: ${rhythm}`);
       console.log(`🔄 Should Transition: ${shouldTransition ? 'YES' : 'NO'}`);
       console.log('='.repeat(50));
 
