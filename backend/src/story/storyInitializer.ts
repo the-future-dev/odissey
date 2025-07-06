@@ -1,9 +1,9 @@
-import { Message, Session, World, StoryModel } from '../database/db-types';
+import { Session, World, StoryModel } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
 import { DatabaseService } from '../database/database';
-import { Logger, createTimer, getElapsed } from '../utils';
-import { extractJsonFromResponse, createLoggerContext } from './mpcUtils';
+import { Logger } from '../utils';
+import { extractJsonFromResponse } from './mpcUtils';
 
 export interface StoryInitializerInput {
   session: Session;
@@ -11,7 +11,8 @@ export interface StoryInitializerInput {
 }
 
 /**
- * StoryInitializer Agent - Responsible for initializing StoryModel from World description
+ * StoryInitializer Agent - Creates the StoryModel for a new session
+ * Role: Set up the story framework that guides the entire adventure
  */
 export class StoryInitializer {
   private aiService: AIServiceManager;
@@ -20,90 +21,52 @@ export class StoryInitializer {
   constructor(aiService: AIServiceManager, db: DatabaseService) {
     this.aiService = aiService;
     this.db = db;
-    
-    Logger.info('StoryInitializer initialized', {
-      component: 'StoryInitializer',
-      operation: 'INIT'
-    });
   }
 
   /**
-   * Initialize StoryModel from World description using tragic storytelling principles
+   * Initialize StoryModel from World description
    */
   async initializeStoryModel(input: StoryInitializerInput): Promise<StoryModel> {
-    const timer = createTimer();
-    const context = createLoggerContext(
-      'StoryInitializer',
-      'INITIALIZE_STORY_MODEL',
-      input.session.id,
-      { worldId: input.world.id }
-    );
+    Logger.info(`🎬 STORY INITIALIZER: Creating story model for "${input.world.title}"`);
 
-    Logger.info('Starting story model initialization', context);
+    const systemPrompt = `You are the Story Initializer. Your job is to create the foundation for an interactive story where the user is the main character.
 
-    const systemPrompt = `You are the StoryInitializer agent. Your role is to analyze a story world and initialize a comprehensive story based on the key elements of tragic storytelling as defined below.
+You're setting up the world, theme, and structure that will guide the entire adventure. Think of yourself as a storyteller who needs to establish the key elements before the story begins.
 
-Based on the story title and description provided, you must create seven components of the StoryModel:
+The user will be the protagonist in this story - they'll make choices and drive the narrative forward. Your job is to create a solid foundation that makes their journey interesting and meaningful.
 
-1. **Plot** - The structure of incidents of the story:
-   - Focus on arrangement of events that will lead to catharsis
-   - Consider potential for Peripeteia (reversal of fortune)
-   - Plan for Anagnorisis (recognition/discovery moments)
-   - Outline path toward Denouement (resolution through knowledge from suffering)
+Based on the story title and description, create these six components, following the Aristotelian framework:
 
-2. **Characters** - Development of the main character and supporting characters:
-   - Define the tragic hero as "between extremes" - neither purely good nor evil
-   - Identify the hamartia (error or frailty) that will drive the tragedy
-   - Establish moral ambiguity that creates compelling conflict
-   - Define motivations driven by "inner experience and individual emotion"
+1. **Core Theme and Moral Message**: What's this story really about? What life lesson or truth will the user discover through their adventure?
 
-3. **Theme/Moral Message** - Central ethical and philosophical framework:
-   - Define the moral purpose and cathartic goals
-   - Establish what insights about existence the story will reveal
-   - Plan how opposing moral claims will create conflict
-   - Consider Hegelian reconciliation of ethical positions
+2. **Genre, Style, and Voice**: What kind of story is this? Adventure? Mystery? Romance? How should it feel when someone experiences it?
 
-4. **Conflict** - Primary tensions driving the narrative:
-   - Determine if conflict is primarily internal (Romantic) or external (Classical)
-   - Define opposing forces: fate vs. will, conscience vs. law, duty vs. desire
-   - Establish how conflict embodies "strife of will with itself"
+3. **Setting**: Where and when does this take place? What are the rules of this world that everyone must follow?
 
-5. **Setting** - Unities of Time and Place:
-   - Define temporal boundaries and constraints
-   - Establish physical location and its symbolic significance
-   - Consider how setting reinforces thematic elements
-   - Plan unity of action within time/place constraints
+4. **Protagonist**: The user is the main character. What's their starting situation and potential for growth in this world?
 
-6. **Style and Genre** - Literary and dramatic approach:
-   - Determine if pure tragedy or blended genre elements
-   - Define linguistic style (high tragic vs. mixed)
-   - Establish tone: Apollonian restraint vs. Dionysian passion
-   - Plan narrative voice and perspective
+5. **Primary Conflict Sources**: What are the main challenges and obstacles the user will face? What creates tension and drives the story forward?
 
-7. **Audience Effect** - Intended emotional and intellectual impact:
-   - Plan specific pity and fear elements for catharsis
-   - Define what enlightenment the audience should gain
-   - Establish how moral purpose will be fulfilled
-   - Consider both ethical and artistic satisfaction
+6. **Intended Impact**: How should the user feel during and after this story? What should they take away from the experience?
 
-RESPONSE FORMAT:
-Return ONLY a valid JSON object with these exact keys:
+Write like you're explaining to a friend, not like you're writing a textbook. Be specific and concrete - give examples and details that paint a clear picture.
+
+Return your response as a JSON object with these exact keys:
 {
-  "plot": "detailed plot structure...",
-  "characters": "character development plan...", 
-  "theme_moral_message": "thematic framework...",
-  "conflict": "conflict structure...",
-  "setting": "time and place unities...",
-  "style_genre": "literary approach...",
-  "audience_effect": "intended impact..."
+  "core_theme_moral_message": "...",
+  "genre_style_voice": "...",
+  "setting": "...",
+  "protagonist": "...",
+  "conflict_sources": "...",
+  "intended_impact": "..."
 }`;
 
-    const userPrompt = `Initialize a StoryModel for:
+    const userPrompt = `Create a story framework for:
 
 Title: "${input.world.title}"
 Description: "${input.world.description || 'No description provided'}"
 
-Create a comprehensive tragic narrative framework based on these elements.`;
+Remember: The user will be the main character in this story. Make it engaging!`;
 
     const request: TextToTextRequest = {
       messages: [
@@ -111,58 +74,42 @@ Create a comprehensive tragic narrative framework based on these elements.`;
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.8,
-      maxTokens: 10000
+      maxTokens: 8000
     };
 
     try {
       const response = await this.aiService.generateText(request);
       
-      Logger.info("\n\nSTORY MODEL:"+ response.content, {
-        ...context,
-      });
-
-      Logger.debug('Raw AI response received', {
-        ...context,
-        metadata: { 
-          responseLength: response.content.length,
-          responsePreview: response.content.substring(0, 100) + '...'
-        }
-      });
-      
-      // Parse the JSON response using the extraction utility
+      // Parse the JSON response
       const storyModelData = extractJsonFromResponse(response.content);
-      
-      Logger.debug('JSON successfully extracted and parsed', {
-        ...context,
-        metadata: { 
-          extractedFields: Object.keys(storyModelData),
-          fieldCount: Object.keys(storyModelData).length
-        }
-      });
       
       // Create the story model in database
       const storyModel = await this.db.createStoryModel(
         input.session.id,
-        storyModelData.plot,
-        storyModelData.characters,
-        storyModelData.theme_moral_message,
-        storyModelData.conflict,
+        storyModelData.core_theme_moral_message,
+        storyModelData.genre_style_voice,
         storyModelData.setting,
-        storyModelData.style_genre,
-        storyModelData.audience_effect
+        storyModelData.protagonist,
+        storyModelData.conflict_sources,
+        storyModelData.intended_impact
       );
 
-      Logger.info('Story model initialized successfully', {
-        ...context,
-        duration: getElapsed(timer)
-      });
+      // Log the complete StoryModel
+      console.log('\n🎯 STORY MODEL CREATED:');
+      console.log('='.repeat(80));
+      console.log(`📖 Core Theme: ${storyModel.core_theme_moral_message}`);
+      console.log(`🎭 Genre/Style: ${storyModel.genre_style_voice}`);
+      console.log(`🌍 Setting: ${storyModel.setting}`);
+      console.log(`👤 Protagonist: ${storyModel.protagonist}`);
+      console.log(`⚔️ Conflicts: ${storyModel.conflict_sources}`);
+      console.log(`💫 Impact: ${storyModel.intended_impact}`);
+      console.log('='.repeat(80));
+
+      Logger.info(`✅ Story model created successfully for session ${input.session.id}`);
 
       return storyModel;
     } catch (error) {
-      Logger.error('Story model initialization failed', error, {
-        ...context,
-        duration: getElapsed(timer)
-      });
+      Logger.error(`❌ Failed to initialize story model: ${error instanceof Error ? error.message : String(error)}`);
       throw new Error('Failed to initialize story model');
     }
   }

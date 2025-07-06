@@ -64,9 +64,9 @@ export class AuthRouter {
         return createErrorResponse('Missing or invalid authorization header', 401, 'Unauthorized');
       }
 
-      const isValid = await this.db.validateUserToken(token);
+      const user = await this.db.getUserByToken(token);
 
-      if (!isValid) {
+      if (!user) {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
       }
 

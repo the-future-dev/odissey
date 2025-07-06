@@ -1,225 +1,145 @@
-import { Message, Session, World, StoryModel } from '../database/db-types';
+import { StoryModel, Chapter } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
-import { DatabaseService } from '../database/database';
-import { Logger, createTimer, getElapsed } from '../utils';
-import { extractJsonFromResponse, createLoggerContext } from './mpcUtils';
+import { Logger } from '../utils';
+import { extractJsonFromResponse } from './mpcUtils';
 
-export interface StoryPredictorInput {
-  session: Session;
-  world: World;
+export interface PredictorInput {
   storyModel: StoryModel;
-  storyStep: string;
-  userInput: string;
-  narratorResponse: string;
-  chatHistory: Message[];
+  historyChapters: Chapter[];
+  currentChapter: Chapter | null;
+}
+
+export interface PredictorOutput {
+  futureChapters: Array<{
+    title: string;
+    description: string;
+  }>;
 }
 
 /**
- * StoryPredictor Agent - Responsible for predicting and applying model updates based on narrative outcome
- * IMPORTANT: This agent preserves all predictions and generated content for analysis
+ * Story Predictor Agent - Computes future chapters based on story model and history
+ * Role: Plan the story's future direction when chapters are completed
  */
 export class StoryPredictor {
   private aiService: AIServiceManager;
-  private db: DatabaseService;
 
-  constructor(aiService: AIServiceManager, db: DatabaseService) {
+  constructor(aiService: AIServiceManager) {
     this.aiService = aiService;
-    this.db = db;
-    
-    Logger.info('StoryPredictor initialized', {
-      component: 'StoryPredictor',
-      operation: 'INIT'
-    });
   }
 
   /**
-   * Predict and apply model updates based on narrative outcome
-   * NOTE: Does not remove any predictions - preserves all generated content for analysis
+   * Predict future chapters based on story progression
    */
-  async predictAndUpdateModel(input: StoryPredictorInput): Promise<void> {
-    const timer = createTimer();
-    const context = createLoggerContext(
-      'StoryPredictor',
-      'PREDICT_AND_UPDATE_MODEL',
-      input.session.id,
-      { 
-        worldId: input.world.id,
-        responseLength: input.narratorResponse.length 
-      }
-    );
+  async predictFutureChapters(input: PredictorInput): Promise<PredictorOutput> {
+    const logTitle = input.currentChapter ? `"${input.currentChapter.title}"` : 'initial session setup';
+    Logger.info(`🔮 STORY PREDICTOR: Computing future chapters after ${logTitle}`);
 
-    Logger.info('Starting model prediction and update', context);
+    const systemPrompt = `You are the Story Predictor. Your job is to plan what chapters should come next in the story.
 
-    const systemPrompt = `You are the StoryPredictor agent in a Model Predictive Control storytelling system. Your role is to analyze the narrative development and predict necessary updates to the StoryModel.
+You work as part of a team that creates interactive stories. ${input.currentChapter ? 'When a chapter is completed, you need to figure out what chapters should come next to continue the story properly.' : 'You\'re setting up the initial chapter plan for a new story session.'}
 
-You must provide exactly 4 updates as a JSON array:
-1. **Immediate Update**: Minimal, greedy changes to reflect what has ALREADY happened (user input + narrator response)
-2. **Choice 1 Prediction**: Additional changes if the user chooses option 1
-3. **Choice 2 Prediction**: Additional changes if the user chooses option 2  
-4. **Choice 3 Prediction**: Additional changes if the user chooses option 3
+Story Framework you're working with:
+- Core Theme: ${input.storyModel.core_theme_moral_message}
+- Genre & Style: ${input.storyModel.genre_style_voice}
+- Setting: ${input.storyModel.setting}
+- Protagonist: ${input.storyModel.protagonist}
+- Main Conflicts: ${input.storyModel.conflict_sources}
+- Intended Impact: ${input.storyModel.intended_impact}
 
-Be GREEDY - only update fields that truly need changing. Minimal updates that reflect the full changes.
+The user is the main character in this story. You're planning their future adventures to serve this story framework.
 
-Consider for updates:
-- Plot development and movement toward climax/resolution
-- Character growth, moral development, or degradation
-- Thematic reinforcement or evolution
-- Conflict escalation or transformation
-- Setting changes or symbolic development
-- Style/genre consistency or intentional shifts
-- Audience effect progression toward catharsis
+Your role in the bigger picture:
+- You create the roadmap for future chapters
+- You ensure the story builds toward the intended impact
+- You provide variety and escalating stakes that match the genre and style
+- You set up meaningful choices that develop the protagonist
 
-RESPONSE FORMAT:
-Return ONLY a valid JSON array with exactly 4 update objects:
+Plan as many future chapters as needed to:
+1. Continue the story naturally from where it currently stands
+2. Build toward the story's intended impact and theme
+3. Create escalating tension and stakes appropriate to the genre
+4. Give the user meaningful choices and character growth
+5. Lead to a satisfying conclusion that delivers the intended impact
+
+Generate as many or as few chapters as the story naturally requires - don't limit yourself to a specific number. Some stories need more chapters, some need fewer.
+
+For each chapter, provide:
+- A compelling title that hints at what will happen
+- A description that explains the chapter's purpose and main events
+
+Write like you're planning an adventure for a friend, not like you're writing a textbook. Make each chapter sound exciting and important.
+
+Return your response as a JSON array:
 [
   {
-    "type": "immediate",
-    "plot": "updated plot if changed...",
-    "characters": "updated characters if changed...",
-    "theme_moral_message": "updated theme if changed...",
-    "conflict": "updated conflict if changed...",
-    "setting": "updated setting if changed...",
-    "style_genre": "updated style if changed...",
-    "audience_effect": "updated effect if changed..."
-  },
-  {
-    "type": "choice_1",
-    "plot": "additional plot changes for choice 1...",
-    "characters": "additional character changes for choice 1..."
-  },
-  {
-    "type": "choice_2", 
-    "plot": "additional plot changes for choice 2...",
-    "characters": "additional character changes for choice 2..."
-  },
-  {
-    "type": "choice_3",
-    "plot": "additional plot changes for choice 3...",
-    "characters": "additional character changes for choice 3..."
+    "title": "Chapter Title",
+    "description": "What happens in this chapter and why it matters"
   }
-]
+]`;
 
-Only include fields that actually need updating in each object. Empty object {} if no changes needed for that update type.`;
+    const historyContext = input.historyChapters.length > 0 
+      ? input.historyChapters.map(ch => `"${ch.title}": ${ch.description}`).join('\n')
+      : 'No previous chapters completed yet.';
 
-    const userPrompt = `IMPLEMENTED STORY STEP: "${input.storyStep}"
+    const currentChapterContext = input.currentChapter 
+      ? `Current Chapter: "${input.currentChapter.title}"
+Description: ${input.currentChapter.description}
 
-CURRENT STORY MODEL:
-Plot: ${input.storyModel.plot}
-Characters: ${input.storyModel.characters}
-Theme/Moral: ${input.storyModel.theme_moral_message}
-Conflict: ${input.storyModel.conflict}
-Setting: ${input.storyModel.setting}
-Style/Genre: ${input.storyModel.style_genre}
-Audience Effect: ${input.storyModel.audience_effect}
+Plan the next chapters that should come after the current chapter.`
+      : `This is initial story setup - plan the first chapters to begin the adventure.`;
 
-USER INPUT: "${input.userInput}"
+    const userPrompt = `${currentChapterContext}
 
-NARRATOR RESPONSE: "${input.narratorResponse}"
+Previous Chapters Completed:
+${historyContext}
 
-What updates to the StoryModel are needed to reflect this story progression?`;
+Make sure they build naturally toward the story's intended impact and give the user exciting challenges to face. Generate the right number of chapters for this story - no artificial limits.`;
 
     const request: TextToTextRequest = {
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.0,
+      temperature: 0.7,
       maxTokens: 2000
     };
 
     try {
       const response = await this.aiService.generateText(request);
       
-      Logger.info("\n\nSTORY PREDICTOR:"+ response.content, {
-        ...context,
-      });
-
-      Logger.debug('Raw AI response received for prediction', {
-        ...context,
-        metadata: { 
-          responseLength: response.content.length,
-          responsePreview: response.content.substring(0, 100) + '...'
+      const futureChapters = extractJsonFromResponse(response.content);
+      
+      if (!Array.isArray(futureChapters) || futureChapters.length === 0) {
+        throw new Error('Expected array of future chapters');
+      }
+      
+      // Validate each chapter has required fields
+      for (const chapter of futureChapters) {
+        if (!chapter.title || !chapter.description) {
+          throw new Error('Each chapter must have title and description');
         }
-      });
-      
-      // Parse the JSON response - expecting array of 4 updates
-      const allUpdates = extractJsonFromResponse(response.content);
-      
-      Logger.debug('JSON successfully extracted and parsed for prediction', {
-        ...context,
-        metadata: { 
-          updatesCount: Array.isArray(allUpdates) ? allUpdates.length : 0,
-          isArray: Array.isArray(allUpdates)
-        }
-      });
-      
-      if (!Array.isArray(allUpdates) || allUpdates.length !== 4) {
-        throw new Error('Expected exactly 4 updates in array format');
       }
 
-      const [immediateUpdate, choice1Update, choice2Update, choice3Update] = allUpdates;
+      const output: PredictorOutput = {
+        futureChapters
+      };
 
-      // Apply immediate update if any fields need changing
-      const immediateFields = Object.keys(immediateUpdate).filter(key => key !== 'type');
-      if (immediateFields.length > 0) {
-        const updateData = { ...immediateUpdate };
-        delete updateData.type; // Remove the type field before updating
-        
-        await this.db.updateStoryModel(input.session.id, updateData);
-        
-        Logger.info('Immediate story model update applied', {
-          ...context,
-          duration: getElapsed(timer),
-          metadata: { 
-            ...context.metadata, 
-            immediateUpdatedFields: immediateFields.length 
-          }
-        });
-      }
-
-      // Store future predictions for choices 1, 2, 3
-      // IMPORTANT: We preserve ALL predictions for analysis - no deletions
-      const predictions = [
-        { choiceNumber: 1 as const, modelUpdate: choice1Update },
-        { choiceNumber: 2 as const, modelUpdate: choice2Update },
-        { choiceNumber: 3 as const, modelUpdate: choice3Update }
-      ].filter(pred => {
-        // Only store predictions that have actual updates
-        const fields = Object.keys(pred.modelUpdate).filter(key => key !== 'type');
-        return fields.length > 0;
+      // Log the predictor output
+      console.log('\n🔮 PREDICTOR OUTPUT:');
+      console.log('='.repeat(70));
+      futureChapters.forEach((chapter, index) => {
+        console.log(`📚 Chapter ${index + 1}: ${chapter.title}`);
+        console.log(`   └─ ${chapter.description}`);
       });
+      console.log('='.repeat(70));
 
-      if (predictions.length > 0) {
-        await this.db.createStoryPredictions(input.session.id, predictions);
-        
-        Logger.info('Story predictions stored successfully - all predictions preserved for analysis', {
-          ...context,
-          duration: getElapsed(timer),
-          metadata: { 
-            ...context.metadata, 
-            storedPredictions: predictions.length 
-          }
-        });
-      }
+      Logger.info(`✅ Predicted ${futureChapters.length} future chapters`);
 
-      Logger.info('Story model prediction and update completed', {
-        ...context,
-        duration: getElapsed(timer),
-        metadata: {
-          ...context.metadata,
-          immediateFields: immediateFields.length,
-          futureChoices: predictions.length
-        }
-      });
-
+      return output;
     } catch (error) {
-      Logger.error('Story model prediction failed', error, {
-        ...context,
-        duration: getElapsed(timer)
-      });
-      // Don't throw - model updates are not critical for user experience
-      Logger.warn('Continuing without model updates');
+      Logger.error(`❌ Failed to predict future chapters: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error('Failed to predict future chapters');
     }
   }
 } 

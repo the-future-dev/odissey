@@ -1,4 +1,4 @@
-import { User, World, Session, Message, StoryModel, StoryStep, StoryPrediction } from './db-types';
+import { User, World, Session, Message, StoryModel, Chapter } from './db-types';
 import { Logger } from '../utils';
 
 export class DatabaseService {
@@ -25,31 +25,25 @@ export class DatabaseService {
   }
 
   async getUserByToken(token: string): Promise<User | null> {
-    const user = await this.db
+    return await this.db
       .prepare('SELECT * FROM users WHERE token = ? AND expires_at > CURRENT_TIMESTAMP')
       .bind(token)
       .first<User>();
-    
-    if (user) {
-      // Update last_seen_at
-      await this.db
-        .prepare('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?')
-        .bind(user.id)
-        .run();
-    }
-    
-    return user;
   }
 
-  async validateUserToken(token: string): Promise<boolean> {
-    const user = await this.getUserByToken(token);
-    return user !== null;
-  }
-
-  async cleanupExpiredUsers(): Promise<void> {
+  async updateUserLastSeen(userId: number): Promise<void> {
     await this.db
-      .prepare('DELETE FROM users WHERE expires_at < CURRENT_TIMESTAMP')
+      .prepare('UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(userId)
       .run();
+  }
+
+  async cleanupExpiredUsers(): Promise<number> {
+    const result = await this.db
+      .prepare('DELETE FROM users WHERE expires_at <= CURRENT_TIMESTAMP')
+      .run();
+    
+    return result.meta.changes || 0;
   }
 
   // === WORLD MANAGEMENT ===
@@ -111,13 +105,12 @@ export class DatabaseService {
       .first<Session>();
   }
 
-
   // === MESSAGE MANAGEMENT ===
 
-  async createMessage(sessionId: string, type: 'user' | 'narrator', content: string): Promise<Message> {
+  async createMessage(sessionId: string, type: 'user' | 'narrator', content: string, chapterNumber: number): Promise<Message> {
     const result = await this.db
-      .prepare('INSERT INTO messages (session_id, type, content) VALUES (?, ?, ?) RETURNING *')
-      .bind(sessionId, type, content)
+      .prepare('INSERT INTO messages (session_id, type, content, chapter_number) VALUES (?, ?, ?, ?) RETURNING *')
+      .bind(sessionId, type, content, chapterNumber)
       .first<Message>();
     
     if (!result) {
@@ -145,26 +138,40 @@ export class DatabaseService {
     return (result.results || []).reverse(); // Return in chronological order
   }
 
+  async getChapterMessages(sessionId: string, chapterNumber: number): Promise<Message[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM messages WHERE session_id = ? AND chapter_number = ? ORDER BY created_at ASC')
+      .bind(sessionId, chapterNumber)
+      .all<Message>();
+    
+    return result.results || [];
+  }
+
+  async getCurrentChapterNumber(sessionId: string): Promise<number> {
+    const currentChapter = await this.getCurrentChapter(sessionId);
+    return currentChapter?.chapter_number || 1;
+  }
+
   // === STORY MODEL MANAGEMENT ===
 
   async createStoryModel(
     sessionId: string,
-    plot: string,
-    characters: string,
-    themeMoralMessage: string,
-    conflict: string,
+    coreThemeMoralMessage: string,
+    genreStyleVoice: string,
     setting: string,
-    styleGenre: string,
-    audienceEffect: string
+    protagonist: string,
+    conflictSources: string,
+    intendedImpact: string
   ): Promise<StoryModel> {
     const result = await this.db
       .prepare(`
         INSERT INTO story_models (
-          session_id, plot, characters, theme_moral_message, conflict, 
-          setting, style_genre, audience_effect
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *
+          session_id, core_theme_moral_message, genre_style_voice, 
+          setting, protagonist, 
+          conflict_sources, intended_impact
+        ) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *
       `)
-      .bind(sessionId, plot, characters, themeMoralMessage, conflict, setting, styleGenre, audienceEffect)
+      .bind(sessionId, coreThemeMoralMessage, genreStyleVoice, setting, protagonist, conflictSources, intendedImpact)
       .first<StoryModel>();
     
     if (!result) {
@@ -181,102 +188,122 @@ export class DatabaseService {
       .first<StoryModel>();
   }
 
-  async updateStoryModel(
-    sessionId: string,
-    updates: Partial<Omit<StoryModel, 'id' | 'session_id' | 'created_at' | 'updated_at'>>
-  ): Promise<StoryModel> {
-    const updateFields = [];
-    const updateValues = [];
-    
-    for (const [key, value] of Object.entries(updates)) {
-      if (value !== undefined) {
-        updateFields.push(`${key} = ?`);
-        updateValues.push(value);
-      }
-    }
-    
-    if (updateFields.length === 0) {
-      throw new Error('No fields to update');
-    }
-    
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    updateValues.push(sessionId);
-    
-    const query = `
-      UPDATE story_models 
-      SET ${updateFields.join(', ')} 
-      WHERE session_id = ? 
-      RETURNING *
-    `;
-    
-    const result = await this.db
-      .prepare(query)
-      .bind(...updateValues)
-      .first<StoryModel>();
-    
-    if (!result) {
-      throw new Error('Failed to update story model');
-    }
-    
-    return result;
-  }
+  // === CHAPTER MANAGEMENT ===
 
-  // === STORY STEP MANAGEMENT ===
-
-  async createStoryStep(
+  async createChapter(
     sessionId: string,
-    storyStep: string,
-    contextUserInput: string,
-    reasoning?: string
-  ): Promise<StoryStep> {
+    chapterNumber: number,
+    title: string,
+    description: string,
+    status: 'history' | 'current' | 'future',
+    decomposition?: string
+  ): Promise<Chapter> {
     const result = await this.db
       .prepare(`
-        INSERT INTO story_step (session_id, story_step, context_user_input, reasoning) 
-        VALUES (?, ?, ?, ?) RETURNING *
+        INSERT INTO chapters (
+          session_id, chapter_number, title, description, status, decomposition
+        ) VALUES (?, ?, ?, ?, ?, ?) RETURNING *
       `)
-      .bind(sessionId, storyStep, contextUserInput, reasoning || null)
-      .first<StoryStep>();
+      .bind(sessionId, chapterNumber, title, description, status, decomposition || null)
+      .first<Chapter>();
     
     if (!result) {
-      throw new Error('Failed to create story step');
+      throw new Error('Failed to create chapter');
     }
     
     return result;
   }
 
-  // === STORY PREDICTION MANAGEMENT ===
+  async getCurrentChapter(sessionId: string): Promise<Chapter | null> {
+    return await this.db
+      .prepare('SELECT * FROM chapters WHERE session_id = ? AND status = ? LIMIT 1')
+      .bind(sessionId, 'current')
+      .first<Chapter>();
+  }
 
-  async clearStoryPredictions(sessionId: string): Promise<void> {
+  async getChaptersByStatus(sessionId: string, status: 'history' | 'current' | 'future'): Promise<Chapter[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM chapters WHERE session_id = ? AND status = ? ORDER BY chapter_number ASC')
+      .bind(sessionId, status)
+      .all<Chapter>();
+    
+    return result.results || [];
+  }
+
+  async getAllChapters(sessionId: string): Promise<Chapter[]> {
+    const result = await this.db
+      .prepare('SELECT * FROM chapters WHERE session_id = ? ORDER BY chapter_number ASC')
+      .bind(sessionId)
+      .all<Chapter>();
+    
+    return result.results || [];
+  }
+
+  async updateChapterStatus(chapterId: number, status: 'history' | 'current' | 'future'): Promise<Chapter> {
+    const result = await this.db
+      .prepare(`
+        UPDATE chapters 
+        SET status = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ? 
+        RETURNING *
+      `)
+      .bind(status, chapterId)
+      .first<Chapter>();
+    
+    if (!result) {
+      throw new Error('Failed to update chapter status');
+    }
+    
+    return result;
+  }
+
+  async updateChapterDecomposition(chapterId: number, decomposition: string): Promise<Chapter> {
+    const result = await this.db
+      .prepare(`
+        UPDATE chapters 
+        SET decomposition = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ? 
+        RETURNING *
+      `)
+      .bind(decomposition, chapterId)
+      .first<Chapter>();
+    
+    if (!result) {
+      throw new Error('Failed to update chapter decomposition');
+    }
+    
+    return result;
+  }
+
+  async completeCurrentChapter(sessionId: string): Promise<void> {
     await this.db
-      .prepare('DELETE FROM story_predictions WHERE session_id = ?')
+      .prepare(`
+        UPDATE chapters 
+        SET status = 'history', updated_at = CURRENT_TIMESTAMP 
+        WHERE session_id = ? AND status = 'current'
+      `)
       .bind(sessionId)
       .run();
   }
 
-  async createStoryPredictions(
-    sessionId: string,
-    predictions: Array<{ choiceNumber: 1 | 2 | 3; modelUpdate: any }>
-  ): Promise<void> {
-    // Clear existing predictions first
-    await this.clearStoryPredictions(sessionId);
-
-    // Insert new predictions
-    for (const prediction of predictions) {
-      await this.db
-        .prepare(`
-          INSERT INTO story_predictions (session_id, choice_number, predicted_model_update) 
-          VALUES (?, ?, ?)
-        `)
-        .bind(sessionId, prediction.choiceNumber, JSON.stringify(prediction.modelUpdate))
-        .run();
+  async setNextChapterAsCurrent(sessionId: string): Promise<Chapter | null> {
+    const nextChapter = await this.db
+      .prepare('SELECT * FROM chapters WHERE session_id = ? AND status = ? ORDER BY chapter_number ASC LIMIT 1')
+      .bind(sessionId, 'future')
+      .first<Chapter>();
+    
+    if (nextChapter) {
+      return await this.updateChapterStatus(nextChapter.id, 'current');
     }
+    
+    return null;
   }
 
-  async getStoryPredictionByChoice(sessionId: string, choiceNumber: 1 | 2 | 3): Promise<StoryPrediction | null> {
-    return await this.db
-      .prepare('SELECT * FROM story_predictions WHERE session_id = ? AND choice_number = ?')
-      .bind(sessionId, choiceNumber)
-      .first<StoryPrediction>();
+  async clearFutureChapters(sessionId: string): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM chapters WHERE session_id = ? AND status = ?')
+      .bind(sessionId, 'future')
+      .run();
   }
 
   // === UTILITY METHODS ===

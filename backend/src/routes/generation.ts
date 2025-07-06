@@ -17,9 +17,7 @@ import { DatabaseService } from '../database/database';
 import { StoryService } from '../story/storyService';
 
 import { Env } from "../routes";
-import { Session, World } from "../database/db-types";
 import { InteractWithStoryRequest } from "./api-types";
-
 export class GenerationRouter {
   private db: DatabaseService;
   private aiService: AIServiceManager;
@@ -71,7 +69,7 @@ export class GenerationRouter {
       });
     }
     
-    this.storyService = new StoryService(this.aiService, this.db);
+    this.storyService = new StoryService(this.db, this.aiService);
 
     Logger.info('GenerationRouter initialized successfully', {
       ...context,
@@ -215,39 +213,17 @@ export class GenerationRouter {
         }
       });
 
-      // Save user message
-      Logger.debug('Saving user message', context);
-      await this.db.createMessage(sessionId, 'user', userMessage);
-
-      // Get recent conversation context
-      Logger.debug('Retrieving conversation context', context);
-      const recentMessages = await this.db.getRecentSessionMessages(sessionId, 10);
-
       Logger.info('Generating AI response', {
         ...context,
         userId: user.id,
         metadata: { 
-          worldId: world.id,
-          contextMessages: recentMessages.length 
+          worldId: world.id
         }
       });
 
-      // Generate AI response
-      const narratorResponse = await this.storyService.generateResponse(
-        userMessage,
-        session,
-        world,
-        recentMessages,
-        ctx
-      );
-
-      // Save narrator response
-      Logger.debug('Saving narrator response', {
-        ...context,
-        userId: user.id,
-        metadata: { responseLength: narratorResponse.length }
-      });
-      await this.db.createMessage(sessionId, 'narrator', narratorResponse);
+      // Generate AI response (handles message saving internally)
+      // Pass ExecutionContext to enable background operations
+      const narratorResponse = await this.storyService.processUserInput(sessionId, userMessage, ctx);
 
       Logger.info('Story interaction completed successfully', {
         ...context,
@@ -255,8 +231,7 @@ export class GenerationRouter {
         duration: getElapsed(timer),
         metadata: { 
           messageLength: userMessage.length,
-          responseLength: narratorResponse.length,
-          contextMessages: recentMessages.length 
+          responseLength: narratorResponse.length
         }
       });
 

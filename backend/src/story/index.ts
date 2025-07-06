@@ -8,12 +8,21 @@ export { StoryNarrator } from './storyNarrator';
 export { StoryPredictor } from './storyPredictor';
 
 // Export utility functions
-export { extractJsonFromResponse, createLoggerContext } from './mpcUtils';
+export { extractJsonFromResponse } from './mpcUtils';
 
 // Export interfaces for backward compatibility and direct use
 export type { 
-  StoryInitializerInput, 
-  StoryOptimizerInput, 
-  StoryNarratorInput, 
-  StoryPredictorInput 
-} from './mpcAgents'; 
+  StoryInitializerInput 
+} from './storyInitializer';
+export type { 
+  OptimizerInput as StoryOptimizerInput,
+  OptimizerOutput as StoryOptimizerOutput
+} from './storyOptimizer';
+export type { 
+  NarratorInput as StoryNarratorInput,
+  NarratorOutput as StoryNarratorOutput
+} from './storyNarrator';
+export type { 
+  PredictorInput as StoryPredictorInput,
+  PredictorOutput as StoryPredictorOutput
+} from './storyPredictor'; 

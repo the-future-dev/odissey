@@ -28,36 +28,33 @@ export interface Message {
   session_id: string;
   type: 'user' | 'narrator';
   content: string;
+  chapter_number: number;
   created_at: string;
 }
 
 export interface StoryModel {
   id: number;
   session_id: string;
-  plot: string;                    // Plot structure of incidents
-  characters: string;              // Character development and tragic hero
-  theme_moral_message: string;     // Theme/Moral Message and catharsis
-  conflict: string;                // Internal vs external conflict
-  setting: string;                 // Unities of Time and Place
-  style_genre: string;             // Style and Genre elements
-  audience_effect: string;         // Intended audience effect (pity, fear, catharsis)
+  core_theme_moral_message: string;      // Core theme and moral message
+  genre_style_voice: string;             // Genre, style, narrative voice
+  setting: string;                       // Setting constraints and world rules
+  protagonist: string;                   // Protagonist - user is the main character
+  conflict_sources: string;              // Primary conflict sources
+  intended_impact: string;               // Intended emotional and intellectual impact
   created_at: string;
   updated_at: string;
 }
 
-export interface StoryStep {
+export interface Chapter {
   id: number;
   session_id: string;
-  story_step: string;              // The single optimization step
-  context_user_input: string;      // User input that triggered this step
-  reasoning?: string;              // Optimizer's reasoning
+  chapter_number: number;
+  title: string;
+  description: string;
+  status: 'history' | 'current' | 'future';
+  decomposition?: string;                // Single line decomposition from Optimizer
   created_at: string;
+  updated_at: string;
 }
 
-export interface StoryPrediction {
-  id: number;
-  session_id: string;
-  choice_number: 1 | 2 | 3;         // Which choice this prediction is for
-  predicted_model_update: string;   // JSON of predicted StoryModel changes
-  created_at: string;
-} 
+ 
