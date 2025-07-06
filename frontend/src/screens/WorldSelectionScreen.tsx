@@ -211,8 +211,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    padding: 16,
+    paddingTop: 20,
     backgroundColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -228,16 +228,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#1E293B',
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   worldsContainer: {
     flex: 1,

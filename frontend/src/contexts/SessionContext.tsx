@@ -8,8 +8,7 @@ interface SessionContextType {
   currentSession: SessionData | null;
   messages: Message[];
   isSessionLoading: boolean;
-  isInteracting: boolean;
-  
+  isInteracting: boolean;  
   // Session management
   startSession: (worldId: string) => Promise<void>;
   resetSession: (worldId: string) => Promise<void>;
@@ -44,6 +43,12 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [currentSession, messages]);
 
   const startSession = async (worldId: string) => {
+    // Check if we already have an active session for this world
+    if (currentSession && currentSession.worldId === worldId && messages.length > 0) {
+      console.log('Session already exists for this world, skipping creation');
+      return;
+    }
+    
     setIsSessionLoading(true);
     try {
       const token = await TokenManager.getValidToken();
@@ -58,11 +63,15 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       };
       
       setMessages([welcomeMessage]);
+      
+      // Automatically send "Let's start!" message after session creation
+      setIsSessionLoading(false); // Stop loading before auto-sending
+      await autoSendStartMessage(session, token, [welcomeMessage]);
+      
     } catch (error) {
       console.error('Failed to start session:', error);
-      throw error;
-    } finally {
       setIsSessionLoading(false);
+      throw error;
     }
   };
 
@@ -85,6 +94,51 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIsInteracting(false);
     
     await clearSessionStorage();
+  };
+
+  const autoSendStartMessage = async (session: SessionData, token: string, currentMessages: Message[]) => {
+    setIsInteracting(true);
+    
+    try {
+      // Add "Let's start!" user message
+      const startMessage: Message = {
+        type: 'user',
+        text: "Let's start!",
+        timestamp: new Date()
+      };
+      
+      const updatedMessages = [...currentMessages, startMessage];
+      setMessages(updatedMessages);
+      
+      // Send message and get response
+      const response = await fetch(`${API_URL}/sessions/${session.sessionId}/interact`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message: "Let's start!" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      const narratorMessage: Message = {
+        type: 'narrator',
+        text: data.response,
+        timestamp: new Date()
+      };
+      
+      const finalMessages = [...updatedMessages, narratorMessage];
+      setMessages(finalMessages);
+    } catch (error) {
+      console.error('Failed to auto-send start message:', error);
+    } finally {
+      setIsInteracting(false);
+    }
   };
 
   const sendMessage = async (message: string) => {
@@ -131,7 +185,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       const finalMessages = [...updatedMessages, narratorMessage];
       setMessages(finalMessages);
-      
     } catch (error) {
       console.error('Failed to send message:', error);
       throw error;

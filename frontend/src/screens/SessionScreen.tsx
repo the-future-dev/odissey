@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Animated } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Animated, Image } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
@@ -19,6 +19,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     messages, 
     isSessionLoading, 
     isInteracting,
+    lastNarratorMessageId,
     startSession,
     resetSession,
     sendMessage 
@@ -29,13 +30,15 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   const dotsOpacity = useRef(new Animated.Value(0.3)).current;
   const optionsOpacity = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef<ScrollView>(null);
+  const messageRefs = useRef<{ [key: number]: View | null }>({});
 
   // Initialize session when component mounts or worldId changes
   useEffect(() => {
+    // Only initialize if we don't have a session for this world or if worldId is different
     if (!currentSession || currentSession.worldId !== worldId) {
       initializeSession();
     }
-  }, [worldId]);
+  }, [worldId, currentSession]);
 
   // Parse options from latest narrator message
   useEffect(() => {
@@ -67,12 +70,51 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [isInteracting]);
 
-  // Auto-scroll when messages change
+  // Auto-scroll when new narrator messages arrive
   useEffect(() => {
-    const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-    return () => clearTimeout(timer);
+    if (lastNarratorMessageId === 0 || messages.length === 0) return;
+    
+    // Find the last narrator message
+    const lastNarratorIndex = messages.findLastIndex(msg => msg.type === 'narrator');
+    
+    if (lastNarratorIndex >= 0) {
+      const timer = setTimeout(() => {
+        const messageRef = messageRefs.current[lastNarratorIndex];
+        if (messageRef && scrollViewRef.current) {
+          messageRef.measureLayout(
+            scrollViewRef.current as any,
+            (x, y) => {
+              scrollViewRef.current?.scrollTo({ 
+                y: Math.max(0, y - 20), // 20px padding from top
+                animated: true 
+              });
+            },
+            () => {
+              // Fallback: scroll to end if measureLayout fails
+              scrollViewRef.current?.scrollToEnd({ animated: true });
+            }
+          );
+        } else {
+          // Fallback: scroll to end
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }
+      }, 300); // Allow time for message to render
+      
+      return () => clearTimeout(timer);
+    }
+  }, [lastNarratorMessageId]);
+
+  // Scroll to end for user messages
+  useEffect(() => {
+    if (messages.length === 0) return;
+    
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.type === 'user') {
+      const timer = setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
   }, [messages]);
 
   const parseOptionsFromText = (text: string): ParsedOption[] => {
@@ -161,7 +203,12 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   if (isSessionLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.statusText}>Starting your adventure...</Text>
+        <Image 
+          source={require('../../assets/odissea_load.gif')} 
+          style={styles.loadingGif}
+          resizeMode="contain"
+        />
+        <Text style={styles.loadingText}>Starting your adventure...</Text>
       </View>
     );
   }
@@ -191,7 +238,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     <KeyboardAvoidingView 
       style={styles.container} 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -223,7 +270,8 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       >
         {messages.map((message, index) => (
           <View 
-            key={index} 
+            key={index}
+            ref={(ref) => { messageRefs.current[index] = ref; }}
             style={[
               styles.messageContainer, 
               message.type === 'user' ? styles.userMessage : styles.narratorMessage
@@ -257,61 +305,67 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
       {/* Quick Options */}
       {!isInteracting && (
         <Animated.View style={[styles.optionsContainer, { opacity: optionsOpacity }]}>
-          {availableOptions.map((option, index) => (
-            <TouchableOpacity
-              key={option.number}
-              style={styles.optionButton}
-              onPress={() => handleQuickSend(option.number, option.text)}
-              activeOpacity={0.7}
-            >
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            style={styles.optionsScrollView}
+          >
+            {availableOptions.map((option, index) => (
+              <TouchableOpacity
+                key={option.number}
+                style={styles.optionButton}
+                onPress={() => handleQuickSend(option.number, option.text)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.optionContent}>
+                  <Text style={styles.optionNumber}>{index + 1})</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.optionTextScroll}
+                    contentContainerStyle={styles.optionTextContainer}
+                  >
+                    <Text style={styles.optionText}>
+                      {option.text}
+                    </Text>
+                  </ScrollView>
+                </View>
+              </TouchableOpacity>
+            ))}
+            
+            {/* Chat Input as Last Option */}
+            <View style={styles.chatOptionContainer}>
               <View style={styles.optionContent}>
-                <Text style={styles.optionNumber}>{index + 1})</Text>
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.optionTextScroll}
-                  contentContainerStyle={styles.optionTextContainer}
-                >
-                  <Text style={styles.optionText}>
-                    {option.text}
-                  </Text>
-                </ScrollView>
-              </View>
-            </TouchableOpacity>
-          ))}
-          
-          {/* Chat Input as Last Option */}
-          <View style={styles.chatOptionContainer}>
-            <View style={styles.optionContent}>
-              <Text style={styles.optionNumber}>{availableOptions.length + 1})</Text>
-              <View style={styles.chatInputWrapper}>
-                <TextInput
-                  style={styles.chatInput}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  placeholder="Type your custom action..."
-                  placeholderTextColor="#666"
-                  multiline
-                  maxLength={500}
-                  editable={!isInteracting}
-                />
-                <TouchableOpacity 
-                  style={[
-                    styles.chatSendButton, 
-                    (!inputText.trim() || isInteracting) && styles.chatSendButtonDisabled
-                  ]}
-                  onPress={handleSendMessage}
-                  disabled={!inputText.trim() || isInteracting}
-                >
-                  <Ionicons 
-                    name="send" 
-                    size={18} 
-                    color={(!inputText.trim() || isInteracting) ? '#9CA3AF' : 'white'} 
+                <Text style={styles.optionNumber}>{availableOptions.length + 1})</Text>
+                <View style={styles.chatInputWrapper}>
+                  <TextInput
+                    style={styles.chatInput}
+                    value={inputText}
+                    onChangeText={setInputText}
+                    placeholder="Type your custom action..."
+                    placeholderTextColor="#666"
+                    multiline
+                    maxLength={500}
+                    editable={!isInteracting}
                   />
-                </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[
+                      styles.chatSendButton, 
+                      (!inputText.trim() || isInteracting) && styles.chatSendButtonDisabled
+                    ]}
+                    onPress={handleSendMessage}
+                    disabled={!inputText.trim() || isInteracting}
+                  >
+                    <Ionicons 
+                      name="send" 
+                      size={18} 
+                      color={(!inputText.trim() || isInteracting) ? '#9CA3AF' : 'white'} 
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
+          </ScrollView>
         </Animated.View>
       )}
     </KeyboardAvoidingView>
@@ -332,8 +386,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
-    paddingTop: 60,
+    padding: 16,
+    paddingTop: 20,
     backgroundColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -354,7 +408,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   worldTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#1E293B',
     flex: 1,
@@ -371,10 +425,10 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     flex: 1,
-    padding: 16,
   },
   messagesContent: {
     padding: 16,
+    paddingBottom: 20,
   },
   messageContainer: {
     marginBottom: 12,
@@ -433,12 +487,16 @@ const styles = StyleSheet.create({
   },
   optionsContainer: {
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: Platform.OS === 'ios' ? 12 : 8,
     paddingHorizontal: 16,
     backgroundColor: '#F8FAFC',
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
+    maxHeight: '40%',
+  },
+  optionsScrollView: {
+    flex: 1,
   },
   optionButton: {
     backgroundColor: 'white',
@@ -501,10 +559,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
     fontSize: 16,
-    maxHeight: 80,
+    maxHeight: 100,
+    minHeight: 44,
     backgroundColor: '#FAFAFA',
+    textAlignVertical: 'top',
   },
   chatSendButton: {
     backgroundColor: '#8B5CF6',
@@ -520,6 +580,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#A1A1AA',
   },
   statusText: {
+    fontSize: 16,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  loadingGif: {
+    width: 200,
+    height: 200,
+    marginBottom: 20,
+  },
+  loadingText: {
     fontSize: 16,
     color: '#64748B',
     textAlign: 'center',
