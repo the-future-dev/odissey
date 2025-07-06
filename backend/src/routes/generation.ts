@@ -40,13 +40,12 @@ export class GenerationRouter {
     // Use Gemini as the primary provider, fallback to HuggingFace
     if (env.GEMINI_API_KEY) {
       const geminiProvider = new GeminiProvider({
-        apiKey: env.GEMINI_API_KEY,
-        model: 'gemini-2.0-flash'
+        apiKey: env.GEMINI_API_KEY
       });
       this.aiService.setProvider(geminiProvider);
       Logger.info('AI provider configured', {
         ...context,
-        metadata: { provider: 'Gemini', model: 'gemini-2.0-flash' }
+        metadata: { provider: 'Gemini' }
       });
     } else if (env.HUGGINGFACE_API_KEY && env.HUGGINGFACE_API_KEY.startsWith('hf_')) {
       const huggingFaceProvider = new HuggingFaceProvider({

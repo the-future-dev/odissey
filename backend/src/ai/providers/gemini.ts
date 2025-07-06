@@ -24,7 +24,7 @@ export class GeminiProvider implements AIProvider {
   constructor(config: GeminiConfig) {
     this.apiKey = config.apiKey;
     this.baseUrl = config.baseUrl || 'https://generativelanguage.googleapis.com/v1beta';
-    this.model = config.model || 'gemini-2.0-flash';
+    this.model = config.model || 'gemini-2.5-flash-lite-preview-06-17';
   }
 
   async generateText(request: TextToTextRequest): Promise<TextToTextResponse> {

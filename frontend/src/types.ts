@@ -12,9 +12,10 @@ export interface SessionData {
 }
 
 export interface Message {
-  type: 'user' | 'narrator';
+  type: 'user' | 'narrator' | 'choice';
   text: string;
   timestamp?: Date;
+  choiceNumber?: number; // For choice messages
 }
 
 export interface ApiResponse<T> {

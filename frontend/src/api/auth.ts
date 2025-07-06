@@ -1,5 +1,6 @@
 import { API_URL } from '../config';
 import { handleResponse, ApiError } from './api';
+import { CrossPlatformStorage } from '../utils/storage';
 
 /**
  * Token Management
@@ -10,8 +11,7 @@ export class TokenManager {
 
   static async getStoredToken(): Promise<string | null> {
     try {
-      const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-      return await AsyncStorage.getItem(this.TOKEN_KEY);
+      return await CrossPlatformStorage.getItem(this.TOKEN_KEY);
     } catch (error) {
       console.warn('Failed to retrieve stored token:', error);
       return null;
@@ -20,8 +20,7 @@ export class TokenManager {
 
   static async storeToken(token: string): Promise<void> {
     try {
-      const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-      await AsyncStorage.setItem(this.TOKEN_KEY, token);
+      await CrossPlatformStorage.setItem(this.TOKEN_KEY, token);
     } catch (error) {
       console.error('Failed to store token:', error);
     }
@@ -29,8 +28,7 @@ export class TokenManager {
 
   static async clearToken(): Promise<void> {
     try {
-      const { default: AsyncStorage } = await import('@react-native-async-storage/async-storage');
-      await AsyncStorage.removeItem(this.TOKEN_KEY);
+      await CrossPlatformStorage.removeItem(this.TOKEN_KEY);
     } catch (error) {
       console.error('Failed to clear token:', error);
     }

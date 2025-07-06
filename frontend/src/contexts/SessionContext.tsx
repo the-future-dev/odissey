@@ -1,28 +1,74 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SessionData, Message } from '../types';
 import { TokenManager, createSession } from '../api';
 import { API_URL } from '../config';
+import { SessionManager } from '../utils/storage';
 
 interface SessionContextType {
   currentSession: SessionData | null;
   messages: Message[];
   isSessionLoading: boolean;
-  isInteracting: boolean;  
+  isInteracting: boolean;
   // Session management
   startSession: (worldId: string) => Promise<void>;
   resetSession: (worldId: string) => Promise<void>;
   endSession: () => Promise<void>;
   sendMessage: (message: string) => Promise<void>;
+  // Multi-session support
+  switchToWorld: (worldId: string) => Promise<void>;
+  hasSessionForWorld: (worldId: string) => Promise<boolean>;
+  getAllActiveSessions: () => Promise<Array<{worldId: string, sessionId: string, lastActive: Date}>>;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
-// Storage keys
-const STORAGE_KEYS = {
-  SESSION: 'odyssey_current_session',
-  MESSAGES: 'odyssey_session_messages',
-} as const;
+// Helper function to parse narrator response and split into narrative text and choices
+const parseNarratorResponse = (response: string, timestamp: Date): Message[] => {
+  const lines = response.split('\n');
+  const narrativeLines: string[] = [];
+  const choices: { number: number; text: string }[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(\d+)[\)\.\-\s]+(.+)$/);
+    
+    if (match) {
+      const number = parseInt(match[1]);
+      const text = match[2].trim();
+      if (number >= 1 && number <= 10 && text.length > 0) {
+        choices.push({ number, text });
+        continue;
+      }
+    }
+    
+    // If it's not a choice, add to narrative
+    narrativeLines.push(line);
+  }
+  
+  const messages: Message[] = [];
+  
+  // Add narrator message with cleaned narrative text (remove empty lines at the end)
+  const narrativeText = narrativeLines.join('\n').replace(/\n\s*\n\s*$/, '').trim();
+  if (narrativeText) {
+    messages.push({
+      type: 'narrator',
+      text: narrativeText,
+      timestamp: timestamp
+    });
+  }
+  
+  // Add choice messages
+  choices.forEach(choice => {
+    messages.push({
+      type: 'choice',
+      text: choice.text,
+      timestamp: timestamp,
+      choiceNumber: choice.number
+    });
+  });
+  
+  return messages;
+};
 
 export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentSession, setCurrentSession] = useState<SessionData | null>(null);
@@ -30,27 +76,51 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isSessionLoading, setIsSessionLoading] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
 
-  // Load persisted session on mount
+  // Cleanup old sessions periodically
   useEffect(() => {
-    loadPersistedSession();
+    const cleanup = async () => {
+      try {
+        await SessionManager.cleanupOldSessions(7); // Clean up sessions older than 7 days
+      } catch (error) {
+        console.warn('Failed to cleanup old sessions:', error);
+      }
+    };
+    
+    cleanup();
   }, []);
 
-  // Auto-save session state when it changes
+  // Auto-save current session when state changes
   useEffect(() => {
-    if (currentSession && messages.length > 0) {
-      saveSessionState();
-    }
+    const saveCurrentSession = async () => {
+      if (currentSession && messages.length > 0) {
+        try {
+          await SessionManager.saveSessionByWorld(currentSession.worldId, currentSession, messages);
+        } catch (error) {
+          console.error('Failed to auto-save session:', error);
+        }
+      }
+    };
+
+    saveCurrentSession();
   }, [currentSession, messages]);
 
   const startSession = async (worldId: string) => {
-    // Check if we already have an active session for this world
-    if (currentSession && currentSession.worldId === worldId && messages.length > 0) {
-      console.log('Session already exists for this world, skipping creation');
-      return;
-    }
-    
     setIsSessionLoading(true);
+    
     try {
+      // First, check if we already have a session for this world
+      const existingSession = await SessionManager.getSessionByWorld(worldId);
+      
+      if (existingSession.session && existingSession.messages) {
+        console.log(`Resuming existing session for world ${worldId}`);
+        setCurrentSession(existingSession.session);
+        setMessages(existingSession.messages);
+        setIsSessionLoading(false);
+        return;
+      }
+
+      // No existing session, create a new one
+      console.log(`Creating new session for world ${worldId}`);
       const token = await TokenManager.getValidToken();
       const session = await createSession(token, worldId);
       
@@ -64,6 +134,9 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       setMessages([welcomeMessage]);
       
+      // Save the new session immediately
+      await SessionManager.saveSessionByWorld(worldId, session, [welcomeMessage]);
+      
       // Automatically send "Let's start!" message after session creation
       setIsSessionLoading(false); // Stop loading before auto-sending
       await autoSendStartMessage(session, token, [welcomeMessage]);
@@ -76,24 +149,70 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const resetSession = async (worldId: string) => {
-    // Clear current state
-    setCurrentSession(null);
-    setMessages([]);
     setIsInteracting(false);
     
-    // Clear storage
-    await clearSessionStorage();
-    
-    // Start new session
-    await startSession(worldId);
+    try {
+      // Remove existing session data
+      await SessionManager.removeSessionByWorld(worldId);
+      
+      // Clear current state if it's for this world
+      if (currentSession?.worldId === worldId) {
+        setCurrentSession(null);
+        setMessages([]);
+      }
+      
+      // Start new session
+      await startSession(worldId);
+    } catch (error) {
+      console.error('Failed to reset session:', error);
+      throw error;
+    }
   };
 
   const endSession = async () => {
-    setCurrentSession(null);
-    setMessages([]);
-    setIsInteracting(false);
-    
-    await clearSessionStorage();
+    if (currentSession) {
+      try {
+        // Keep the session in storage, just clear from memory
+        // This allows resuming later
+        setCurrentSession(null);
+        setMessages([]);
+        setIsInteracting(false);
+      } catch (error) {
+        console.error('Failed to end session:', error);
+      }
+    }
+  };
+
+  const switchToWorld = async (worldId: string) => {
+    try {
+      // Save current session before switching
+      if (currentSession && messages.length > 0) {
+        await SessionManager.saveSessionByWorld(currentSession.worldId, currentSession, messages);
+      }
+
+      // Load session for new world
+      const existingSession = await SessionManager.getSessionByWorld(worldId);
+      
+      if (existingSession.session && existingSession.messages) {
+        console.log(`Switching to existing session for world ${worldId}`);
+        setCurrentSession(existingSession.session);
+        setMessages(existingSession.messages);
+      } else {
+        // No session exists for this world, start a new one
+        await startSession(worldId);
+      }
+    } catch (error) {
+      console.error('Failed to switch to world:', error);
+      throw error;
+    }
+  };
+
+  const hasSessionForWorld = async (worldId: string): Promise<boolean> => {
+    return await SessionManager.hasSessionForWorld(worldId);
+  };
+
+  const getAllActiveSessions = async (): Promise<Array<{worldId: string, sessionId: string, lastActive: Date}>> => {
+    return await SessionManager.getAllActiveSessions();
   };
 
   const autoSendStartMessage = async (session: SessionData, token: string, currentMessages: Message[]) => {
@@ -126,14 +245,14 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       const data = await response.json();
       
-      const narratorMessage: Message = {
-        type: 'narrator',
-        text: data.response,
-        timestamp: new Date()
-      };
+      // Parse the narrator response into narrative and choice messages
+      const parsedMessages = parseNarratorResponse(data.response, new Date());
       
-      const finalMessages = [...updatedMessages, narratorMessage];
+      const finalMessages = [...updatedMessages, ...parsedMessages];
       setMessages(finalMessages);
+      
+      // Save the session with the new messages
+      await SessionManager.saveSessionByWorld(session.worldId, session, finalMessages);
     } catch (error) {
       console.error('Failed to auto-send start message:', error);
     } finally {
@@ -177,67 +296,19 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       const data = await response.json();
       
-      const narratorMessage: Message = {
-        type: 'narrator',
-        text: data.response,
-        timestamp: new Date()
-      };
+      // Parse the narrator response into narrative and choice messages
+      const parsedMessages = parseNarratorResponse(data.response, new Date());
       
-      const finalMessages = [...updatedMessages, narratorMessage];
+      const finalMessages = [...updatedMessages, ...parsedMessages];
       setMessages(finalMessages);
+      
+      // Save the session with the new messages
+      await SessionManager.saveSessionByWorld(currentSession.worldId, currentSession, finalMessages);
     } catch (error) {
       console.error('Failed to send message:', error);
       throw error;
     } finally {
       setIsInteracting(false);
-    }
-  };
-
-  // Storage helpers
-  const saveSessionState = async () => {
-    try {
-      if (currentSession) {
-        await AsyncStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(currentSession));
-      }
-      if (messages.length > 0) {
-        await AsyncStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messages));
-      }
-    } catch (error) {
-      console.error('Failed to save session state:', error);
-    }
-  };
-
-  const loadPersistedSession = async () => {
-    try {
-      const [sessionData, messagesData] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.SESSION),
-        AsyncStorage.getItem(STORAGE_KEYS.MESSAGES)
-      ]);
-      
-      if (sessionData) {
-        setCurrentSession(JSON.parse(sessionData));
-      }
-      
-      if (messagesData) {
-        const parsedMessages = JSON.parse(messagesData);
-        setMessages(parsedMessages.map((msg: any) => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        })));
-      }
-    } catch (error) {
-      console.error('Failed to load persisted session:', error);
-    }
-  };
-
-  const clearSessionStorage = async () => {
-    try {
-      await Promise.all([
-        AsyncStorage.removeItem(STORAGE_KEYS.SESSION),
-        AsyncStorage.removeItem(STORAGE_KEYS.MESSAGES)
-      ]);
-    } catch (error) {
-      console.error('Failed to clear session storage:', error);
     }
   };
 
@@ -250,6 +321,9 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     resetSession,
     endSession,
     sendMessage,
+    switchToWorld,
+    hasSessionForWorld,
+    getAllActiveSessions,
   };
 
   return (
