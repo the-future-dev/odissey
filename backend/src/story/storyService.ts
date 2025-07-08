@@ -1,200 +1,61 @@
-import { Message, Session, World } from '../database/db-types';
+import { Session, World } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
-import { TextToTextRequest } from '../ai/interfaces';
 import { DatabaseService } from '../database/database';
-import { Logger, createTimer, getElapsed } from '../utils';
+import { Logger } from '../utils';
+import { MPCStoryAgents } from './mpcAgents';
 
+/**
+ * StoryService - Main interface for story interactions
+ * Role: Coordinate the MPC agents and handle user interactions
+ */
 export class StoryService {
-  private aiService: AIServiceManager;
   private db: DatabaseService;
+  private aiService: AIServiceManager;
+  private mpcAgents: MPCStoryAgents;
 
-  constructor(aiService: AIServiceManager, db: DatabaseService) {
-    this.aiService = aiService;
+  constructor(db: DatabaseService, aiService: AIServiceManager) {
     this.db = db;
+    this.aiService = aiService;
+    this.mpcAgents = new MPCStoryAgents(db, aiService);
     
-    Logger.info('StoryService', {
-      component: 'StoryService',
-      operation: 'INIT'
-    });
+    Logger.info('🎮 StoryService initialized');
   }
 
   /**
-   * Generate a narrative response
+   * Initialize new story session
    */
-  async generateResponse(
-    userMessage: string,
-    session: Session,
-    world: World,
-    recentMessages: Message[]
-  ): Promise<string> {
-    const timer = createTimer();
-    const context = {
-      component: 'StoryService',
-      operation: 'GENERATE_RESPONSE',
-      sessionId: session.id,
-      metadata: {
-        worldId: world.id,
-        messageLength: userMessage.length,
-        historyCount: recentMessages.length
-      }
-    };
-
-    Logger.info('Starting story response generation', context);
-
+  async initializeSession(session: Session, world: World, ctx?: ExecutionContext): Promise<void> {
+    Logger.info(`🎬 INITIALIZING STORY SESSION: ${session.id}`);
+    
     try {
-      // Generate dynamic system prompt
-      const systemPrompt = this.generateSystemPrompt(world);
-
-      // Build conversation messages for AI
-      const messages = this.buildConversationMessages(
-        systemPrompt,
-        userMessage,
-        recentMessages
-      );
-
-      // Generate AI response
-      const aiRequest: TextToTextRequest = {
-        messages,
-        temperature: 0.1,
-        maxTokens: 5000
-      };
-
-      const response = await this.generateWithRetry(aiRequest, 3, context);
-      
-      return response.content;
+      await this.mpcAgents.initializeSessionWithChapters(session, world, ctx);
+      Logger.info(`✅ Story session initialized successfully`);
     } catch (error) {
-      Logger.error('Response generation failed', error, {
-        ...context,
-        duration: getElapsed(timer)
-      });
-      throw new Error('AI service is temporarily unavailable. Please check your API configuration and try again.');
+      Logger.error(`❌ Failed to initialize story session: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error('Failed to initialize story session');
     }
   }
 
   /**
-   * Generate a system prompt
+   * Process user input and generate story response
    */
-  private generateSystemPrompt(world: World): string {
-    return `You are a narrator. Your objective is to shape the story "${world.title}", where the user is the main character.
-You are the omniscient narrator: your objective is to shape the best story for the user. You only don't know how the user will act in your story!
-
-WORLD DESCRIPTION:
-${world.description || ''}
-
-TASK - RESPONSE STRUCTURE REQUIREMENTS:
-- 200-300 words per response
-- Use simple worlds, a friendly tone and a simple phrase format.
-- Structure each response to generally include:
-  1. SCENE SETTING: describe the scene and/or the situation.
-  2. EVENT: Something happening to get the user interested.
-  3. CHOICES: Give 3 options the user can pick from.
-
-FORMAT - at the end of the message use a numbered list with format:
-\`\`\`choice
-1) ... 
-2) ... 
-3) ... 
-\`\`\``;
-  }
-
-  /**
-   * Generate response with retry logic
-   */
-  private async generateWithRetry(
-    request: TextToTextRequest, 
-    maxRetries: number,
-    context: any
-  ): Promise<{ content: string }> {
-    let lastError: Error | null = null;
+  async processUserInput(sessionId: string, userInput: string, ctx?: ExecutionContext): Promise<string> {
+    Logger.info(`💬 PROCESSING USER INPUT: "${userInput.substring(0, 50)}..."`);
     
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        Logger.info(`AI generation attempt ${attempt}/${maxRetries}`, {
-          ...context,
-          metadata: { ...context.metadata, attempt }
-        });
-        
-        const response = await this.aiService.generateText(request);
-
-        return response;
-      } catch (error) {
-        lastError = error as Error;
-        Logger.warn(`AI generation attempt ${attempt} failed`, {
-          error: lastError.message,
-          ...context,
-          metadata: { ...context.metadata, attempt }
-        });
-
-        if (attempt < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-          Logger.info(`Retrying in ${delay}ms...`, {
-            ...context,
-            metadata: { ...context.metadata, attempt, retryDelay: delay }
-          });
-          await this.sleep(delay);
-        }
-      }
+    try {
+      const response = await this.mpcAgents.processUserInput(sessionId, userInput, ctx);
+      Logger.info(`✅ User input processed successfully`);
+      return response;
+    } catch (error) {
+      Logger.error(`❌ Failed to process user input: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error('Failed to process user input');
     }
-
-    Logger.error(`All AI generation attempts failed`, lastError, {
-      ...context,
-      metadata: { ...context.metadata, maxRetries }
-    });
-    throw lastError || new Error('AI generation failed after retries');
   }
 
   /**
-   * Sleep utility
+   * Get session status and information
    */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Build conversation messages for AI context
-   */
-  private buildConversationMessages(
-    systemPrompt: string,
-    userMessage: string,
-    recentMessages: Message[]
-  ): Array<{ role: 'system' | 'user' | 'assistant'; content: string }> {
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: systemPrompt }
-    ];
-
-    // Add recent conversation history
-    for (const msg of recentMessages) {
-      const role = this.mapMessageTypeToRole(msg.type);
-      messages.push({
-        role,
-        content: msg.content
-      });
-    }
-
-    // Add current user message
-    messages.push({ role: 'user', content: userMessage });
-
-    return messages;
-  }
-
-  /**
-   * Map database message types to AI role types with validation
-   */
-  private mapMessageTypeToRole(messageType: string): 'user' | 'assistant' {
-    switch (messageType) {
-      case 'user':
-        return 'user';
-      case 'narrator':
-        return 'assistant';
-      default:
-        Logger.error('Unknown message type encountered', new Error(`Invalid message type: ${messageType}`), {
-          component: 'StoryService',
-          operation: 'MAP_MESSAGE_TYPE',
-          metadata: {
-            messageType
-          }
-        });
-        throw new Error(`Unknown message type: ${messageType}. Expected 'user' or 'narrator'.`);
-    }
+  async getSessionStatus(sessionId: string): Promise<any> {
+    return await this.mpcAgents.getSessionStatus(sessionId);
   }
 } 

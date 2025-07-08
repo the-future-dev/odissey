@@ -1,5 +1,5 @@
 {
-  "name": "odissey-frontend",
+  "name": "odissey",
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
@@ -10,28 +10,35 @@
     "set-prod": "node -e \"const fs = require('fs'); const config = fs.readFileSync('src/config.ts', 'utf8'); fs.writeFileSync('src/config.ts', config.replace(/const FORCE_ENVIRONMENT.*= '(development|production)';/, 'const FORCE_ENVIRONMENT: \\'development\\' | \\'production\\' | null = \\'production\\';'));\"",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:web": "expo export -p web",
+    "build:production": "npm run set-prod && npm run build:web",
+    "deploy": "npm run build:production && wrangler deploy",
+    "deploy:dev": "npm run set-dev && npm run build:web && wrangler deploy",
+    "dev:worker": "npm run build:web && wrangler dev"
   },
   "dependencies": {
     "@expo/metro-runtime": "~5.0.4",
-    "@react-native-async-storage/async-storage": "^2.1.2",
+    "@react-native-async-storage/async-storage": "2.1.2",
     "@react-navigation/bottom-tabs": "^7.3.14",
     "@react-navigation/native": "^7.1.10",
     "@react-navigation/native-stack": "^7.3.14",
-    "expo": "~53.0.9",
+    "axios": "^1.6.8",
+    "expo": "53.0.18",
     "expo-status-bar": "~2.2.3",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "react-native": "0.79.2",
+    "react-native": "0.79.5",
+    "react-native-gesture-handler": "~2.24.0",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "react-native-web": "^0.20.0",
-    "axios": "^1.6.8"
+    "react-native-web": "^0.20.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~19.0.10",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "wrangler": "^4.23.0"
   },
   "private": true
 }

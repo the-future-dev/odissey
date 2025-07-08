@@ -1,11 +1,42 @@
 // === DATABASE TYPES ===
 
-export interface User {
+// Anonymous session for backwards compatibility
+export interface AnonymousSession {
   id: number;
   token: string;
   created_at: string;
   expires_at: string;
   last_seen_at: string;
+}
+
+// New authenticated user from Google OAuth
+export interface User {
+  id: number;
+  google_id: string;
+  email: string;
+  name: string;
+  picture_url?: string;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string;
+}
+
+// Google OAuth session for token management
+export interface GoogleOAuthSession {
+  id: number;
+  user_id: number;
+  access_token: string;
+  refresh_token?: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// Migration tracking
+export interface Migration {
+  id: number;
+  migration_name: string;
+  executed_at: string;
 }
 
 export interface World {
@@ -28,5 +59,33 @@ export interface Message {
   session_id: string;
   type: 'user' | 'narrator';
   content: string;
+  chapter_number: number;
   created_at: string;
-} 
+}
+
+export interface StoryModel {
+  id: number;
+  session_id: string;
+  core_theme_moral_message: string;      // Core theme and moral message
+  genre_style_voice: string;             // Genre, style, narrative voice
+  setting: string;                       // Setting constraints and world rules
+  protagonist: string;                   // Protagonist - user is the main character
+  conflict_sources: string;              // Primary conflict sources
+  intended_impact: string;               // Intended emotional and intellectual impact
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Chapter {
+  id: number;
+  session_id: string;
+  chapter_number: number;
+  title: string;
+  description: string;
+  status: 'history' | 'current' | 'future';
+  decomposition?: string;                // Single line decomposition from Optimizer
+  created_at: string;
+  updated_at: string;
+}
+
+ 

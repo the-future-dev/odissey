@@ -1,0 +1,49 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "odissey-frontend",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2025-06-07",
+  "compatibility_flags": [
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1.0
+  },
+  "vars": {
+    "LOG_LEVEL": "INFO",
+    "LOG_SAMPLING_RATE": "1.0",
+    "LOG_REQUEST_DETAILS": "true"
+  },
+  /**
+   * Environment-specific configurations
+   */
+  "env": {
+    "development": {
+      "vars": {
+        "LOG_LEVEL": "DEBUG",
+        "LOG_SAMPLING_RATE": "1.0",
+        "LOG_REQUEST_DETAILS": "true"
+      }
+    },
+    "staging": {
+      "vars": {
+        "LOG_LEVEL": "INFO",
+        "LOG_SAMPLING_RATE": "1.0",
+        "LOG_REQUEST_DETAILS": "true"
+      }
+    },
+    "production": {
+      "vars": {
+        "LOG_LEVEL": "WARN",
+        "LOG_SAMPLING_RATE": "1.0",
+        "LOG_REQUEST_DETAILS": "false"
+      }
+    }
+  }
+} 

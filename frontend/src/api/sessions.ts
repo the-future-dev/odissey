@@ -1,5 +1,5 @@
 import { API_URL } from '../config';
-import { SessionData } from '../types';
+import { SessionData, GetChaptersResponse } from '../types';
 import { handleResponse } from './api';
 
 /**
@@ -27,6 +27,20 @@ export const createSession = async (token: string, worldId: string): Promise<Ses
  */
 export const getSessionDetails = async (token: string, sessionId: string): Promise<SessionData> => {
   const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
+    method: 'GET',
+    headers: { 
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  
+  return handleResponse(response);
+};
+
+/**
+ * Retrieves chapters for a session
+ */
+export const getChapters = async (token: string, sessionId: string): Promise<GetChaptersResponse> => {
+  const response = await fetch(`${API_URL}/sessions/${sessionId}/chapters`, {
     method: 'GET',
     headers: { 
       'Authorization': `Bearer ${token}`

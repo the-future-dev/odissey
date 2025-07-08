@@ -14,7 +14,8 @@
 		"directory": "./public"
 	},
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 0.1
 	},
 	/**
 	 * D1 Database
@@ -24,7 +25,7 @@
 		{
 			"binding": "DB",
 			"database_name": "odissey-db",
-			"database_id": "58312b0d-6617-4424-b149-2407b249958c"
+			"database_id": "d0534ed9-ba2c-4cb8-a0c7-bf4a1eefb6ec"
 		}
 	],
 	/**
@@ -44,11 +45,40 @@
 	 * Environment Variables
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 	 */
-	"vars": {},
+	"vars": {
+		"LOG_LEVEL": "INFO",
+		"LOG_SAMPLING_RATE": "1.0",
+		"LOG_REQUEST_DETAILS": "true"
+	},
 	/**
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
+	/**
+	 * Development Environment
 	 */
+	"env": {
+		"development": {
+			"vars": {
+				"LOG_LEVEL": "DEBUG",
+				"LOG_SAMPLING_RATE": "1.0",
+				"LOG_REQUEST_DETAILS": "true"
+			}
+		},
+		"staging": {
+			"vars": {
+				"LOG_LEVEL": "INFO",
+				"LOG_SAMPLING_RATE": "1.0",
+				"LOG_REQUEST_DETAILS": "true"
+			}
+		},
+		"production": {
+			"vars": {
+				"LOG_LEVEL": "WARN",
+				"LOG_SAMPLING_RATE": "1.0",
+				"LOG_REQUEST_DETAILS": "false"
+			}
+		}
+	},
 
 	/**
 	 * Static Assets

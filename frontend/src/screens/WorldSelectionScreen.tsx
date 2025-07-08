@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, World } from '../types';
-import { TokenManager, getAllWorlds, createWorld } from '../api';
+import { GoogleTokenManager, getAllWorlds, createWorld } from '../api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WorldSelection'>;
 
@@ -16,23 +16,48 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
   const [newWorldDescription, setNewWorldDescription] = useState('');
 
   useEffect(() => {
-    loadWorlds();
+    checkAuthAndLoadWorlds();
   }, []);
 
-  const loadWorlds = async () => {
+  const checkAuthAndLoadWorlds = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const token = await TokenManager.getValidToken();
+      // Check if user is authenticated first
+      const authResult = await GoogleTokenManager.checkExistingAuth();
+      if (!authResult.isAuthenticated) {
+        // Redirect to authentication
+        navigation.replace('GoogleAuth');
+        return;
+      }
+      
+      // User is authenticated, load worlds
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        // This shouldn't happen if checkExistingAuth passed, but just in case
+        navigation.replace('GoogleAuth');
+        return;
+      }
+      
       const worldsData = await getAllWorlds(token);
       setWorlds(worldsData);
     } catch (error) {
       console.error('Failed to load worlds:', error);
-      setError('Failed to load worlds. Please try again.');
+      // If there's an auth error, redirect to login
+      if (error instanceof Error && error.message.includes('authentication')) {
+        navigation.replace('GoogleAuth');
+      } else {
+        setError('Failed to load worlds. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadWorlds = async () => {
+    await checkAuthAndLoadWorlds();
   };
 
   const selectWorld = (world: World) => {
@@ -50,7 +75,12 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
 
     try {
       setIsCreating(true);
-      const token = await TokenManager.getValidToken();
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        throw new Error('No valid authentication token. Please sign in again.');
+      }
+      
       await createWorld(token, newWorldTitle.trim(), newWorldDescription.trim() || undefined);
       
       // Reset form and close modal
@@ -211,8 +241,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   header: {
-    padding: 20,
-    paddingTop: 60,
+    padding: 16,
+    paddingTop: 20,
     backgroundColor: 'white',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -228,16 +258,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#1E293B',
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#64748B',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   worldsContainer: {
     flex: 1,

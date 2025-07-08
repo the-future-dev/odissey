@@ -1,0 +1,363 @@
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { SessionData, Message } from '../types';
+import { GoogleTokenManager, createSession } from '../api';
+import { API_URL } from '../config';
+import { SessionManager } from '../utils/storage';
+
+interface SessionContextType {
+  currentSession: SessionData | null;
+  messages: Message[];
+  isSessionLoading: boolean;
+  isInteracting: boolean;
+  // Session management
+  startSession: (worldId: string) => Promise<void>;
+  resetSession: (worldId: string) => Promise<void>;
+  endSession: () => Promise<void>;
+  sendMessage: (message: string) => Promise<void>;
+  // Multi-session support
+  switchToWorld: (worldId: string) => Promise<void>;
+  hasSessionForWorld: (worldId: string) => Promise<boolean>;
+  getAllActiveSessions: () => Promise<Array<{worldId: string, sessionId: string, lastActive: Date}>>;
+}
+
+const SessionContext = createContext<SessionContextType | undefined>(undefined);
+
+// Helper function to parse narrator response and split into narrative text and choices
+const parseNarratorResponse = (response: string, timestamp: Date): Message[] => {
+  const lines = response.split('\n');
+  const narrativeLines: string[] = [];
+  const choices: { number: number; text: string }[] = [];
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(\d+)[\)\.\-\s]+(.+)$/);
+    
+    if (match) {
+      const number = parseInt(match[1]);
+      const text = match[2].trim();
+      if (number >= 1 && number <= 10 && text.length > 0) {
+        choices.push({ number, text });
+        continue;
+      }
+    }
+    
+    // If it's not a choice, add to narrative
+    narrativeLines.push(line);
+  }
+  
+  const messages: Message[] = [];
+  
+  // Add narrator message with cleaned narrative text (remove empty lines at the end)
+  const narrativeText = narrativeLines.join('\n').replace(/\n\s*\n\s*$/, '').trim();
+  if (narrativeText) {
+    messages.push({
+      type: 'narrator',
+      text: narrativeText,
+      timestamp: timestamp
+    });
+  }
+  
+  // Add choice messages
+  choices.forEach(choice => {
+    messages.push({
+      type: 'choice',
+      text: choice.text,
+      timestamp: timestamp,
+      choiceNumber: choice.number
+    });
+  });
+  
+  return messages;
+};
+
+export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [currentSession, setCurrentSession] = useState<SessionData | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isSessionLoading, setIsSessionLoading] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
+
+  // Cleanup old sessions periodically
+  useEffect(() => {
+    const cleanup = async () => {
+      try {
+        await SessionManager.cleanupOldSessions(7); // Clean up sessions older than 7 days
+      } catch (error) {
+        console.warn('Failed to cleanup old sessions:', error);
+      }
+    };
+    
+    cleanup();
+  }, []);
+
+  // Auto-save current session when state changes
+  useEffect(() => {
+    const saveCurrentSession = async () => {
+      if (currentSession && messages.length > 0) {
+        try {
+          await SessionManager.saveSessionByWorld(currentSession.worldId, currentSession, messages);
+        } catch (error) {
+          console.error('Failed to auto-save session:', error);
+        }
+      }
+    };
+
+    saveCurrentSession();
+  }, [currentSession, messages]);
+
+  const startSession = async (worldId: string) => {
+    setIsSessionLoading(true);
+    
+    try {
+      // Check authentication first
+      const authResult = await GoogleTokenManager.checkExistingAuth();
+      if (!authResult.isAuthenticated) {
+        throw new Error('User not authenticated. Please sign in again.');
+      }
+
+      // Load existing session first
+      const existingSession = await SessionManager.getSessionByWorld(worldId);
+      
+      if (existingSession.session && existingSession.messages) {
+        console.log(`Resuming existing session for world ${worldId}`);
+        setCurrentSession(existingSession.session);
+        setMessages(existingSession.messages);
+        setIsSessionLoading(false);
+        return;
+      }
+
+      // No existing session, create a new one
+      console.log(`Creating new session for world ${worldId}`);
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        throw new Error('No valid authentication token. Please sign in again.');
+      }
+      
+      const session = await createSession(token, worldId);
+      
+      setCurrentSession(session);
+      
+      const welcomeMessage: Message = {
+        type: 'narrator',
+        text: 'Welcome to your adventure! What would you like to do?',
+        timestamp: new Date()
+      };
+      
+      setMessages([welcomeMessage]);
+      
+      // Save the new session immediately
+      await SessionManager.saveSessionByWorld(worldId, session, [welcomeMessage]);
+      
+      // Automatically send "Let's start!" message after session creation
+      setIsSessionLoading(false); // Stop loading before auto-sending
+      await autoSendStartMessage(session, token, [welcomeMessage]);
+      
+    } catch (error) {
+      console.error('Failed to start session:', error);
+      setIsSessionLoading(false);
+      throw error;
+    }
+  };
+
+  const resetSession = async (worldId: string) => {
+    setIsInteracting(false);
+    
+    try {
+      // Remove existing session data
+      await SessionManager.removeSessionByWorld(worldId);
+      
+      // Clear current state if it's for this world
+      if (currentSession?.worldId === worldId) {
+        setCurrentSession(null);
+        setMessages([]);
+      }
+      
+      // Start new session
+      await startSession(worldId);
+    } catch (error) {
+      console.error('Failed to reset session:', error);
+      throw error;
+    }
+  };
+
+  const endSession = async () => {
+    if (currentSession) {
+      try {
+        // Keep the session in storage, just clear from memory
+        // This allows resuming later
+        setCurrentSession(null);
+        setMessages([]);
+        setIsInteracting(false);
+      } catch (error) {
+        console.error('Failed to end session:', error);
+      }
+    }
+  };
+
+  const switchToWorld = async (worldId: string) => {
+    try {
+      // Save current session before switching
+      if (currentSession && messages.length > 0) {
+        await SessionManager.saveSessionByWorld(currentSession.worldId, currentSession, messages);
+      }
+
+      // Load session for new world
+      const existingSession = await SessionManager.getSessionByWorld(worldId);
+      
+      if (existingSession.session && existingSession.messages) {
+        console.log(`Switching to existing session for world ${worldId}`);
+        setCurrentSession(existingSession.session);
+        setMessages(existingSession.messages);
+      } else {
+        // No session exists for this world, start a new one
+        await startSession(worldId);
+      }
+    } catch (error) {
+      console.error('Failed to switch to world:', error);
+      throw error;
+    }
+  };
+
+  const hasSessionForWorld = async (worldId: string): Promise<boolean> => {
+    return await SessionManager.hasSessionForWorld(worldId);
+  };
+
+  const getAllActiveSessions = async (): Promise<Array<{worldId: string, sessionId: string, lastActive: Date}>> => {
+    return await SessionManager.getAllActiveSessions();
+  };
+
+  const autoSendStartMessage = async (session: SessionData, token: string, currentMessages: Message[]) => {
+    setIsInteracting(true);
+    
+    try {
+      // Add "Let's start!" user message
+      const startMessage: Message = {
+        type: 'user',
+        text: "Let's start!",
+        timestamp: new Date()
+      };
+      
+      const updatedMessages = [...currentMessages, startMessage];
+      setMessages(updatedMessages);
+      
+      // Send message and get response
+      const response = await fetch(`${API_URL}/sessions/${session.sessionId}/interact`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message: "Let's start!" }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Parse the narrator response into narrative and choice messages
+      const parsedMessages = parseNarratorResponse(data.response, new Date());
+      
+      const finalMessages = [...updatedMessages, ...parsedMessages];
+      setMessages(finalMessages);
+      
+      // Save the session with the new messages
+      await SessionManager.saveSessionByWorld(session.worldId, session, finalMessages);
+    } catch (error) {
+      console.error('Failed to auto-send start message:', error);
+    } finally {
+      setIsInteracting(false);
+    }
+  };
+
+  const sendMessage = async (message: string) => {
+    if (!currentSession) {
+      throw new Error('No active session');
+    }
+    
+    setIsInteracting(true);
+    
+    try {
+      // Check authentication first
+      const authResult = await GoogleTokenManager.checkExistingAuth();
+      if (!authResult.isAuthenticated) {
+        throw new Error('User not authenticated. Please sign in again.');
+      }
+
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        throw new Error('No valid authentication token. Please sign in again.');
+      }
+      
+      // Add user message immediately
+      const userMessage: Message = {
+        type: 'user',
+        text: message,
+        timestamp: new Date()
+      };
+      
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
+      
+      // Send message and get response
+      const response = await fetch(`${API_URL}/sessions/${currentSession.sessionId}/interact`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      // Parse the narrator response into narrative and choice messages
+      const parsedMessages = parseNarratorResponse(data.response, new Date());
+      
+      const finalMessages = [...updatedMessages, ...parsedMessages];
+      setMessages(finalMessages);
+      
+      // Save the session with the new messages
+      await SessionManager.saveSessionByWorld(currentSession.worldId, currentSession, finalMessages);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      throw error;
+    } finally {
+      setIsInteracting(false);
+    }
+  };
+
+  const value: SessionContextType = {
+    currentSession,
+    messages,
+    isSessionLoading,
+    isInteracting,
+    startSession,
+    resetSession,
+    endSession,
+    sendMessage,
+    switchToWorld,
+    hasSessionForWorld,
+    getAllActiveSessions,
+  };
+
+  return (
+    <SessionContext.Provider value={value}>
+      {children}
+    </SessionContext.Provider>
+  );
+};
+
+export const useSession = () => {
+  const context = useContext(SessionContext);
+  if (context === undefined) {
+    throw new Error('useSession must be used within a SessionProvider');
+  }
+  return context;
+}; 
