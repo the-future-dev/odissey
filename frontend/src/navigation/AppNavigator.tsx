@@ -6,7 +6,7 @@ import { RootStackParamList } from '../types';
 
 import { GoogleAuthScreen } from '../screens/GoogleAuthScreen';
 import { SessionScreen } from '../screens/SessionScreen';
-import { WorldSelectionScreen } from '../screens/WorldSelectionScreen';
+import { BottomTabNavigator } from './BottomTabNavigator';
 import { ChaptersScreen } from '../screens/ChaptersScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -23,7 +23,7 @@ export const AppNavigator: React.FC = () => {
           }}
         >
           <Stack.Screen name="GoogleAuth" component={GoogleAuthScreen} />
-          <Stack.Screen name="WorldSelection" component={WorldSelectionScreen} />
+          <Stack.Screen name="MainTabs" component={BottomTabNavigator} />
           <Stack.Screen name="Session" component={SessionScreen} />
           <Stack.Screen name="Chapters" component={ChaptersScreen} />
         </Stack.Navigator>
