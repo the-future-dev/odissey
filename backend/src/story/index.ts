@@ -6,6 +6,8 @@ export { StoryInitializer } from './storyInitializer';
 export { StoryOptimizer } from './storyOptimizer';
 export { StoryNarrator } from './storyNarrator';
 export { StoryPredictor } from './storyPredictor';
+export { ChapterManager } from './chapterManager';
+export { StoryAnalyzer } from './storyAnalyzer';
 
 // Export utility functions
 export { extractJsonFromResponse } from './mpcUtils';
@@ -25,4 +27,10 @@ export type {
 export type { 
   PredictorInput as StoryPredictorInput,
   PredictorOutput as StoryPredictorOutput
-} from './storyPredictor'; 
+} from './storyPredictor';
+
+export type {
+  AnalyzerInput as StoryAnalyzerInput,
+  AnalyzerOutput as StoryAnalyzerOutput,
+  AristotelianAnalysis
+} from './storyAnalyzer'; 

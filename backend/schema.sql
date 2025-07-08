@@ -1,10 +1,43 @@
--- User authentication and session management
+-- User authentication and session management (POST-MIGRATION SCHEMA)
+
+-- Anonymous sessions table (renamed from original users table)
+-- CREATE TABLE IF NOT EXISTS sessions_anonymous (
+--   id INTEGER PRIMARY KEY AUTOINCREMENT,
+--   token TEXT UNIQUE NOT NULL,
+--   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+--   expires_at DATETIME NOT NULL,
+--   last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+-- );
+
+-- Google-authenticated users table
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  token TEXT UNIQUE NOT NULL,
+  google_id TEXT UNIQUE NOT NULL,          -- Google OAuth user ID
+  email TEXT UNIQUE NOT NULL,              -- User email from Google
+  name TEXT NOT NULL,                      -- User display name from Google
+  picture_url TEXT,                        -- User profile picture URL
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_login_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Google OAuth sessions table for token management
+CREATE TABLE IF NOT EXISTS google_oauth_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  access_token TEXT UNIQUE NOT NULL,
+  refresh_token TEXT,
   expires_at DATETIME NOT NULL,
-  last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Migration tracking table
+CREATE TABLE IF NOT EXISTS migrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  migration_name TEXT UNIQUE NOT NULL,
+  executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- World definitions
@@ -75,6 +108,13 @@ CREATE INDEX IF NOT EXISTS idx_messages_chapter_number ON messages(session_id, c
 CREATE INDEX IF NOT EXISTS idx_story_models_session_id ON story_models(session_id);
 CREATE INDEX IF NOT EXISTS idx_chapters_session_id ON chapters(session_id);
 CREATE INDEX IF NOT EXISTS idx_chapters_session_status ON chapters(session_id, status);
+
+-- Google authentication indexes
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_google_oauth_sessions_user_id ON google_oauth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_google_oauth_sessions_access_token ON google_oauth_sessions(access_token);
+CREATE INDEX IF NOT EXISTS idx_google_oauth_sessions_expires_at ON google_oauth_sessions(expires_at);
 
 -- Sample world data (Titanic adventure)
 INSERT OR IGNORE INTO worlds (id, title, description) VALUES 

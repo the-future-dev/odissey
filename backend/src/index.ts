@@ -15,14 +15,30 @@
  */
 
 import { ApiRouter } from './routes';
-import { handleCorsPreflightRequest, corsHeaders } from './utils';
+import { Logger, createTimer, getElapsed } from './utils';
 import { Env } from './routes';
 
 // Global router cache to avoid recreating for every request
 let cachedRouter: ApiRouter | null = null;
 let cacheKey: string | null = null;
+let isLoggerInitialized = false;
 
 function getCachedRouter(env: Env): ApiRouter {
+	// Initialize logger once per worker instance
+	if (!isLoggerInitialized) {
+		Logger.initialize(env);
+		isLoggerInitialized = true;
+		Logger.info('Worker instance initialized', {
+			component: 'WORKER',
+			operation: 'INIT',
+			metadata: {
+				logLevel: env.LOG_LEVEL || 'INFO',
+				samplingRate: env.LOG_SAMPLING_RATE || '1.0',
+				requestDetails: env.LOG_REQUEST_DETAILS || 'true'
+			}
+		});
+	}
+
 	// Create a cache key based on environment variables that matter
 	const currentCacheKey = `${env.GEMINI_API_KEY || ''}_${env.HUGGINGFACE_API_KEY || ''}_${env.OPENAI_API_KEY || ''}`;
 	
@@ -32,7 +48,10 @@ function getCachedRouter(env: Env): ApiRouter {
 	}
 	
 	// Create new router and cache it
-	console.log('Initializing ApiRouter (environment changed or first load)');
+	Logger.info('Initializing ApiRouter (environment changed or first load)', {
+		component: 'WORKER',
+		operation: 'ROUTER_INIT'
+	});
 	cachedRouter = new ApiRouter(env);
 	cacheKey = currentCacheKey;
 	
@@ -41,8 +60,20 @@ function getCachedRouter(env: Env): ApiRouter {
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		const requestTimer = createTimer();
+		const requestId = crypto.randomUUID().substring(0, 8);
+		
+		// Initialize logger if not already done
+		const router = getCachedRouter(env);
+
 		// Handle CORS preflight requests first
 		if (request.method === 'OPTIONS') {
+			Logger.debug('CORS preflight request', {
+				component: 'WORKER',
+				operation: 'CORS_PREFLIGHT',
+				metadata: { requestId }
+			});
+
 			return new Response(null, {
 				status: 200,
 				headers: {
@@ -54,18 +85,47 @@ export default {
 			});
 		}
 
+		// Log incoming request with Cloudflare-specific headers
+		Logger.logRequest(request, undefined, {
+			component: 'WORKER',
+			operation: 'INCOMING_REQUEST',
+			metadata: { requestId }
+		});
+
 		try {
-			// Get cached router (only creates new one if needed)
-			const router = getCachedRouter(env);
-			
 			// Route the request
 			const response = await router.route(request, ctx);
+			
+			// Log response
+			const duration = getElapsed(requestTimer);
+			Logger.logRequest(request, response, {
+				component: 'WORKER',
+				operation: 'RESPONSE_SENT',
+				duration,
+				metadata: { 
+					requestId,
+					status: response.status,
+					statusText: response.statusText
+				}
+			});
+
+			// Log performance metrics
+			Logger.performance('request_duration', duration, 'ms', {
+				component: 'WORKER',
+				metadata: {
+					requestId,
+					method: request.method,
+					url: new URL(request.url).pathname,
+					status: response.status
+				}
+			});
 			
 			// Ensure all responses have CORS headers
 			const headers = new Headers(response.headers);
 			headers.set('Access-Control-Allow-Origin', '*');
 			headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 			headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+			headers.set('X-Request-ID', requestId); // Add request ID for tracking
 			
 			return new Response(response.body, {
 				status: response.status,
@@ -74,14 +134,28 @@ export default {
 			});
 			
 		} catch (error) {
-			console.error('Worker error:', error);
+			const duration = getElapsed(requestTimer);
+			
+			Logger.error('Worker error', error, {
+				component: 'WORKER',
+				operation: 'ERROR_HANDLER',
+				duration,
+				metadata: {
+					requestId,
+					method: request.method,
+					url: new URL(request.url).pathname,
+					userAgent: request.headers.get('User-Agent'),
+					ray: request.headers.get('CF-Ray')
+				}
+			});
 			
 			// Return a generic error response with CORS headers
 			return new Response(
 				JSON.stringify({
 					error: 'Internal Server Error',
 					message: 'An unexpected error occurred',
-					status: 500
+					status: 500,
+					requestId: requestId
 				}),
 				{
 					status: 500,
@@ -90,6 +164,7 @@ export default {
 						'Access-Control-Allow-Origin': '*',
 						'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 						'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+						'X-Request-ID': requestId,
 					},
 				}
 			);

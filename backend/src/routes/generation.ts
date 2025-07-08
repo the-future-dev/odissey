@@ -140,8 +140,10 @@ export class GenerationRouter {
       }
 
       Logger.debug('Authenticating user', context);
-      const user = await this.db.getUserByToken(token);
-      if (!user) {
+      
+      // Get Google OAuth session
+      const oauthSession = await this.db.getOAuthSessionByToken(token);
+      if (!oauthSession) {
         Logger.warn('Invalid or expired token provided', {
           ...context,
           metadata: { tokenLength: token?.length || 0 }
@@ -149,10 +151,29 @@ export class GenerationRouter {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
       }
 
+      // Check if token is expired
+      if (new Date(oauthSession.expires_at) <= new Date()) {
+        await this.db.deleteOAuthSession(oauthSession.id);
+        Logger.warn('Token expired', {
+          ...context,
+          metadata: { tokenLength: token?.length || 0 }
+        });
+        return createErrorResponse('Token expired', 401, 'Unauthorized');
+      }
+
+      const user = await this.db.getUserById(oauthSession.user_id);
+      if (!user) {
+        Logger.warn('User not found for OAuth session', {
+          ...context,
+          metadata: { oauthSessionId: oauthSession.id }
+        });
+        return createErrorResponse('User not found', 401, 'Unauthorized');
+      }
+
       Logger.debug('User authenticated successfully', {
         ...context,
         userId: user.id,
-        metadata: { userToken: user.token.substring(0, 8) + '...' }
+        metadata: { userEmail: user.email, userName: user.name }
       });
 
       const body = await parseJsonBody<InteractWithStoryRequest>(request);

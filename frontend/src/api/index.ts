@@ -1,5 +1,6 @@
 // Export all API modules for easier importing
 export * from './api';
-export * from './auth';
+// Export GoogleTokenManager (preferred)
+export { GoogleTokenManager } from './googleAuth';
 export * from './worlds';
 export * from './sessions'; 

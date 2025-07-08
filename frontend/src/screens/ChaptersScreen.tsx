@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, Chapter, GetChaptersResponse } from '../types';
-import { TokenManager, getChapters } from '../api';
+import { GoogleTokenManager, getChapters } from '../api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Chapters'>;
 
@@ -14,23 +14,47 @@ export const ChaptersScreen: React.FC<Props> = ({ route, navigation }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadChapters();
+    checkAuthAndLoadChapters();
   }, [sessionId]);
 
-  const loadChapters = async () => {
+  const checkAuthAndLoadChapters = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const token = await TokenManager.getValidToken();
+      // Check if user is authenticated first
+      const authResult = await GoogleTokenManager.checkExistingAuth();
+      if (!authResult.isAuthenticated) {
+        // Redirect to authentication
+        navigation.replace('GoogleAuth');
+        return;
+      }
+      
+      // User is authenticated, load chapters
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        navigation.replace('GoogleAuth');
+        return;
+      }
+      
       const chaptersData = await getChapters(token, sessionId);
       setChapters(chaptersData);
     } catch (error) {
       console.error('Failed to load chapters:', error);
-      setError('Failed to load chapters. Please try again.');
+      // If there's an auth error, redirect to login
+      if (error instanceof Error && error.message.includes('authentication')) {
+        navigation.replace('GoogleAuth');
+      } else {
+        setError('Failed to load chapters. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadChapters = async () => {
+    await checkAuthAndLoadChapters();
   };
 
   const renderChapter = (chapter: Chapter, index: number) => {

@@ -43,6 +43,7 @@ export interface ApiResponse<T> {
 }
 
 export type RootStackParamList = {
+  GoogleAuth: undefined;
   WorldSelection: undefined;
   Session: { worldId: string; worldTitle?: string };
   Chapters: { sessionId: string; worldTitle?: string };

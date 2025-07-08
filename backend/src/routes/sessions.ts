@@ -84,9 +84,21 @@ export class SessionsRouter {
         return createErrorResponse('Missing authorization header', 401, 'Unauthorized');
       }
 
-      const user = await this.db.getUserByToken(token);
-      if (!user) {
+      // Get Google OAuth session
+      const oauthSession = await this.db.getOAuthSessionByToken(token);
+      if (!oauthSession) {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
+      }
+
+      // Check if token is expired
+      if (new Date(oauthSession.expires_at) <= new Date()) {
+        await this.db.deleteOAuthSession(oauthSession.id);
+        return createErrorResponse('Token expired', 401, 'Unauthorized');
+      }
+
+      const user = await this.db.getUserById(oauthSession.user_id);
+      if (!user) {
+        return createErrorResponse('User not found', 401, 'Unauthorized');
       }
 
       // Verify user has access to this session
@@ -123,9 +135,21 @@ export class SessionsRouter {
         return createErrorResponse('Missing authorization header', 401, 'Unauthorized');
       }
 
-      const user = await this.db.getUserByToken(token);
-      if (!user) {
+      // Get Google OAuth session
+      const oauthSession = await this.db.getOAuthSessionByToken(token);
+      if (!oauthSession) {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
+      }
+
+      // Check if token is expired
+      if (new Date(oauthSession.expires_at) <= new Date()) {
+        await this.db.deleteOAuthSession(oauthSession.id);
+        return createErrorResponse('Token expired', 401, 'Unauthorized');
+      }
+
+      const user = await this.db.getUserById(oauthSession.user_id);
+      if (!user) {
+        return createErrorResponse('User not found', 401, 'Unauthorized');
       }
 
       const body = await parseJsonBody<CreateSessionResponse>(request);

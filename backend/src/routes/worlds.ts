@@ -1,6 +1,7 @@
 import { 
   createJsonResponse, 
   createErrorResponse, 
+  extractBearerToken,
   isValidWorldId,
   logRequest
 } from '../utils';
@@ -39,11 +40,55 @@ export class WorldsRouter {
     return null; // Route not handled by this router
   }
 
+  /**
+   * Authenticate user with Google OAuth token
+   * Returns user object if authenticated, throws error if not
+   */
+  private async authenticateUser(request: Request) {
+    const authHeader = request.headers.get('Authorization');
+    const token = extractBearerToken(authHeader);
+
+    if (!token) {
+      throw new Error('Missing authorization header');
+    }
+
+    // Get Google OAuth session
+    const oauthSession = await this.db.getOAuthSessionByToken(token);
+    if (!oauthSession) {
+      throw new Error('Invalid or expired token');
+    }
+
+    // Check if token is expired
+    if (new Date(oauthSession.expires_at) <= new Date()) {
+      await this.db.deleteOAuthSession(oauthSession.id);
+      throw new Error('Token expired');
+    }
+
+    const user = await this.db.getUserById(oauthSession.user_id);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return user;
+  }
+
   private async getWorlds(request: Request): Promise<Response> {
     try {
+      // Authenticate user
+      await this.authenticateUser(request);
+
       const worlds = await this.db.getAllWorlds();
       return createJsonResponse(worlds);
     } catch (error) {
+      if (error instanceof Error && (
+        error.message.includes('Missing authorization') ||
+        error.message.includes('Invalid or expired token') ||
+        error.message.includes('Token expired') ||
+        error.message.includes('User not found')
+      )) {
+        return createErrorResponse(error.message, 401, 'Unauthorized');
+      }
+      
       console.error('Error fetching worlds:', error);
       return createErrorResponse('Failed to fetch worlds', 500);
     }
@@ -51,6 +96,9 @@ export class WorldsRouter {
 
   private async createWorld(request: Request): Promise<Response> {
     try {
+      // Authenticate user
+      const user = await this.authenticateUser(request);
+
       const body = await request.json() as { title?: unknown; description?: unknown };
       const { title, description } = body;
 
@@ -71,6 +119,15 @@ export class WorldsRouter {
       const world = await this.db.createWorld(id, title.trim(), description && typeof description === 'string' ? description.trim() : undefined);
       return createJsonResponse(world);
     } catch (error) {
+      if (error instanceof Error && (
+        error.message.includes('Missing authorization') ||
+        error.message.includes('Invalid or expired token') ||
+        error.message.includes('Token expired') ||
+        error.message.includes('User not found')
+      )) {
+        return createErrorResponse(error.message, 401, 'Unauthorized');
+      }
+      
       console.error('Error creating world:', error);
       return createErrorResponse('Failed to create world', 500);
     }
@@ -78,6 +135,9 @@ export class WorldsRouter {
 
   private async getWorld(request: Request, worldId: string): Promise<Response> {
     try {
+      // Authenticate user
+      await this.authenticateUser(request);
+
       if (!isValidWorldId(worldId)) {
         return createErrorResponse('Invalid world ID format', 400);
       }
@@ -89,6 +149,15 @@ export class WorldsRouter {
 
       return createJsonResponse(world);
     } catch (error) {
+      if (error instanceof Error && (
+        error.message.includes('Missing authorization') ||
+        error.message.includes('Invalid or expired token') ||
+        error.message.includes('Token expired') ||
+        error.message.includes('User not found')
+      )) {
+        return createErrorResponse(error.message, 401, 'Unauthorized');
+      }
+      
       console.error('Error fetching world:', error);
       return createErrorResponse('Failed to fetch world', 500);
     }

@@ -1,4 +1,4 @@
-import { User, World, Session, Message, StoryModel, Chapter } from './db-types';
+import { User, World, Session, Message, StoryModel, Chapter, GoogleOAuthSession } from './db-types';
 import { Logger } from '../utils';
 
 export class DatabaseService {
@@ -275,6 +275,24 @@ export class DatabaseService {
     return result;
   }
 
+  async updateChapterDescription(chapterId: number, description: string): Promise<Chapter> {
+    const result = await this.db
+      .prepare(`
+        UPDATE chapters 
+        SET description = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ? 
+        RETURNING *
+      `)
+      .bind(description, chapterId)
+      .first<Chapter>();
+    
+    if (!result) {
+      throw new Error('Failed to update chapter description');
+    }
+    
+    return result;
+  }
+
   async completeCurrentChapter(sessionId: string): Promise<void> {
     await this.db
       .prepare(`
@@ -303,6 +321,139 @@ export class DatabaseService {
     await this.db
       .prepare('DELETE FROM chapters WHERE session_id = ? AND status = ?')
       .bind(sessionId, 'future')
+      .run();
+  }
+
+  // === GOOGLE OAUTH USER MANAGEMENT ===
+
+  async getUserByGoogleId(googleId: string): Promise<User | null> {
+    return await this.db
+      .prepare('SELECT * FROM users WHERE google_id = ?')
+      .bind(googleId)
+      .first<User>();
+  }
+
+  async getUserById(userId: number): Promise<User | null> {
+    return await this.db
+      .prepare('SELECT * FROM users WHERE id = ?')
+      .bind(userId)
+      .first<User>();
+  }
+
+  async createUser(userData: {
+    google_id: string;
+    email: string;
+    name: string;
+    picture_url?: string;
+  }): Promise<User> {
+    const result = await this.db
+      .prepare(`
+        INSERT INTO users (google_id, email, name, picture_url, last_login_at) 
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) 
+        RETURNING *
+      `)
+      .bind(userData.google_id, userData.email, userData.name, userData.picture_url || null)
+      .first<User>();
+    
+    if (!result) {
+      throw new Error('Failed to create user');
+    }
+    
+    return result;
+  }
+
+  async updateUser(userId: number, updates: {
+    email?: string;
+    name?: string;
+    picture_url?: string;
+    last_login_at?: string;
+  }): Promise<User> {
+    const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updates);
+    
+    const result = await this.db
+      .prepare(`
+        UPDATE users 
+        SET ${setClause}, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ? 
+        RETURNING *
+      `)
+      .bind(...values, userId)
+      .first<User>();
+    
+    if (!result) {
+      throw new Error('Failed to update user or user not found');
+    }
+    
+    return result;
+  }
+
+  // === GOOGLE OAUTH SESSION MANAGEMENT ===
+
+  async createOAuthSession(sessionData: {
+    user_id: number;
+    access_token: string;
+    refresh_token?: string;
+    expires_at: string;
+  }): Promise<GoogleOAuthSession> {
+    const result = await this.db
+      .prepare(`
+        INSERT INTO google_oauth_sessions (user_id, access_token, refresh_token, expires_at) 
+        VALUES (?, ?, ?, ?) 
+        RETURNING *
+      `)
+      .bind(sessionData.user_id, sessionData.access_token, sessionData.refresh_token || null, sessionData.expires_at)
+      .first<GoogleOAuthSession>();
+    
+    if (!result) {
+      throw new Error('Failed to create OAuth session');
+    }
+    
+    return result;
+  }
+
+  async getOAuthSessionByToken(accessToken: string): Promise<GoogleOAuthSession | null> {
+    return await this.db
+      .prepare('SELECT * FROM google_oauth_sessions WHERE access_token = ?')
+      .bind(accessToken)
+      .first<GoogleOAuthSession>();
+  }
+
+  async updateOAuthSession(sessionId: number, updates: {
+    access_token?: string;
+    refresh_token?: string;
+    expires_at?: string;
+  }): Promise<void> {
+    const setClause = Object.keys(updates).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updates);
+    
+    await this.db
+      .prepare(`
+        UPDATE google_oauth_sessions 
+        SET ${setClause}, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `)
+      .bind(...values, sessionId)
+      .run();
+  }
+
+  async deleteOAuthSession(sessionId: number): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM google_oauth_sessions WHERE id = ?')
+      .bind(sessionId)
+      .run();
+  }
+
+  async deleteOAuthSessionsByUserId(userId: number): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM google_oauth_sessions WHERE user_id = ?')
+      .bind(userId)
+      .run();
+  }
+
+  async cleanupExpiredOAuthSessions(): Promise<void> {
+    await this.db
+      .prepare('DELETE FROM google_oauth_sessions WHERE expires_at <= CURRENT_TIMESTAMP')
       .run();
   }
 

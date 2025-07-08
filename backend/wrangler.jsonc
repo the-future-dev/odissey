@@ -14,7 +14,8 @@
 		"directory": "./public"
 	},
 	"observability": {
-		"enabled": true
+		"enabled": true,
+		"head_sampling_rate": 0.1
 	},
 	/**
 	 * D1 Database
@@ -44,11 +45,40 @@
 	 * Environment Variables
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
 	 */
-	"vars": {},
+	"vars": {
+		"LOG_LEVEL": "INFO",
+		"LOG_SAMPLING_RATE": "1.0",
+		"LOG_REQUEST_DETAILS": "true"
+	},
 	/**
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
+	/**
+	 * Development Environment
 	 */
+	"env": {
+		"development": {
+			"vars": {
+				"LOG_LEVEL": "DEBUG",
+				"LOG_SAMPLING_RATE": "1.0",
+				"LOG_REQUEST_DETAILS": "true"
+			}
+		},
+		"staging": {
+			"vars": {
+				"LOG_LEVEL": "INFO",
+				"LOG_SAMPLING_RATE": "1.0",
+				"LOG_REQUEST_DETAILS": "true"
+			}
+		},
+		"production": {
+			"vars": {
+				"LOG_LEVEL": "WARN",
+				"LOG_SAMPLING_RATE": "1.0",
+				"LOG_REQUEST_DETAILS": "false"
+			}
+		}
+	},
 
 	/**
 	 * Static Assets

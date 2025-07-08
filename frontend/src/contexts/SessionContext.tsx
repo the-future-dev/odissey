@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { SessionData, Message } from '../types';
-import { TokenManager, createSession } from '../api';
+import { GoogleTokenManager, createSession } from '../api';
 import { API_URL } from '../config';
 import { SessionManager } from '../utils/storage';
 
@@ -108,7 +108,13 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIsSessionLoading(true);
     
     try {
-      // First, check if we already have a session for this world
+      // Check authentication first
+      const authResult = await GoogleTokenManager.checkExistingAuth();
+      if (!authResult.isAuthenticated) {
+        throw new Error('User not authenticated. Please sign in again.');
+      }
+
+      // Load existing session first
       const existingSession = await SessionManager.getSessionByWorld(worldId);
       
       if (existingSession.session && existingSession.messages) {
@@ -121,7 +127,12 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
 
       // No existing session, create a new one
       console.log(`Creating new session for world ${worldId}`);
-      const token = await TokenManager.getValidToken();
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        throw new Error('No valid authentication token. Please sign in again.');
+      }
+      
       const session = await createSession(token, worldId);
       
       setCurrentSession(session);
@@ -268,7 +279,17 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIsInteracting(true);
     
     try {
-      const token = await TokenManager.getValidToken();
+      // Check authentication first
+      const authResult = await GoogleTokenManager.checkExistingAuth();
+      if (!authResult.isAuthenticated) {
+        throw new Error('User not authenticated. Please sign in again.');
+      }
+
+      const token = await GoogleTokenManager.getValidToken();
+      
+      if (!token) {
+        throw new Error('No valid authentication token. Please sign in again.');
+      }
       
       // Add user message immediately
       const userMessage: Message = {
