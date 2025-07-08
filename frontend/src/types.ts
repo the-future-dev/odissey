@@ -42,9 +42,16 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+// Bottom Tab Navigator types
+export type BottomTabParamList = {
+  WorldGeneration: undefined;
+  WorldSelection: undefined;
+  Profile: undefined;
+};
+
 export type RootStackParamList = {
   GoogleAuth: undefined;
-  WorldSelection: undefined;
+  MainTabs: undefined;
   Session: { worldId: string; worldTitle?: string };
   Chapters: { sessionId: string; worldTitle?: string };
 };

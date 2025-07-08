@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput, Alert } from 'react-native';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList, World } from '../types';
+import { BottomTabParamList, RootStackParamList, World } from '../types';
 import { GoogleTokenManager, getAllWorlds, createWorld } from '../api';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'WorldSelection'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<BottomTabParamList, 'WorldSelection'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
   const [worlds, setWorlds] = useState<World[]>([]);
@@ -28,7 +33,7 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
       const authResult = await GoogleTokenManager.checkExistingAuth();
       if (!authResult.isAuthenticated) {
         // Redirect to authentication
-        navigation.replace('GoogleAuth');
+        navigation.getParent()?.navigate('GoogleAuth');
         return;
       }
       
@@ -37,7 +42,7 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
       
       if (!token) {
         // This shouldn't happen if checkExistingAuth passed, but just in case
-        navigation.replace('GoogleAuth');
+        navigation.getParent()?.navigate('GoogleAuth');
         return;
       }
       
@@ -47,7 +52,7 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
       console.error('Failed to load worlds:', error);
       // If there's an auth error, redirect to login
       if (error instanceof Error && error.message.includes('authentication')) {
-        navigation.replace('GoogleAuth');
+        navigation.getParent()?.navigate('GoogleAuth');
       } else {
         setError('Failed to load worlds. Please try again.');
       }
@@ -61,7 +66,7 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const selectWorld = (world: World) => {
-    navigation.navigate('Session', { 
+    navigation.getParent()?.navigate('Session', { 
       worldId: world.id, 
       worldTitle: world.title 
     });

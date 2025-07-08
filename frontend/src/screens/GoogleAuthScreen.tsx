@@ -23,7 +23,7 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
       if (existingAuth.isAuthenticated && existingAuth.user) {
         setUser(existingAuth.user);
         // Navigate to world selection if already authenticated
-        navigation.replace('WorldSelection');
+        navigation.replace('MainTabs');
       }
     } catch (error) {
       console.warn('Failed to check existing auth:', error);
@@ -175,7 +175,7 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
   const handleAuthSuccess = (user?: any) => {
     setIsAuthenticating(false);
     if (user) setUser(user);
-    navigation.replace('WorldSelection');
+    navigation.replace('MainTabs');
   };
 
   const handleTryAgain = () => {
