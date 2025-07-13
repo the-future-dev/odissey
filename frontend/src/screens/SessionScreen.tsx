@@ -23,7 +23,6 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   const [inputText, setInputText] = useState('');
   const dotsOpacity = useRef(new Animated.Value(0.3)).current;
   const scrollViewRef = useRef<ScrollView>(null);
-  const messageRefs = useRef<{ [key: number]: View | null }>({});
 
   // Initialize session when component mounts or worldId changes
   useEffect(() => {
@@ -41,17 +40,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     }
   }, [isInteracting]);
 
-  // Auto-scroll to latest content
-  useEffect(() => {
-    if (messages.length === 0) return;
-    
-    // Always scroll to end to show the latest content
-    const timer = setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 150);
-    
-    return () => clearTimeout(timer);
-  }, [messages]);
+
 
   const startThinkingAnimation = () => {
     const animate = () => {
@@ -224,7 +213,6 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
             {messages.map((message, index) => (
               <View 
                 key={index}
-                ref={(ref) => { messageRefs.current[index] = ref; }}
                 style={[
                   styles.messageContainer, 
                   message.type === 'user' ? styles.userMessage : 
@@ -296,12 +284,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
 
           {/* Chat Input Section */}
           <View style={styles.optionsContainer}>
-            <ScrollView 
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              style={styles.optionsScrollView}
-              keyboardShouldPersistTaps="handled"
-            >
+            <View style={styles.optionsScrollView}>
               {/* Chat Input - Custom Action */}
               <View style={styles.chatInputContainer}>
                 <View style={styles.chatInputContent}>
@@ -342,7 +325,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
                   </View>
                 </View>
               </View>
-            </ScrollView>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </View>
