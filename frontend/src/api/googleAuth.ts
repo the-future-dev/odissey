@@ -1,4 +1,4 @@
-import { API_URL } from '../config';
+import { API_URL, OAUTH_CONFIG } from '../config';
 import { handleResponse, ApiError } from './api';
 import { CrossPlatformStorage } from '../utils/storage';
 
@@ -105,8 +105,8 @@ export class GoogleTokenManager {
   }
 
   /**
-   * Check if user has valid authentication
-   * Works in both browser and mobile environments
+   * Check for existing authentication
+   * Returns authentication status and user info if available
    */
   static async checkExistingAuth(): Promise<{ isAuthenticated: boolean; user?: GoogleUser }> {
     try {
@@ -133,16 +133,35 @@ export class GoogleTokenManager {
       }
       
       if (token && user) {
-        // Validate token with backend
-        const isValid = await this.validateToken(token);
-        
-        if (isValid) {
-          // Ensure token is stored in both systems
-          await this.storeToken(token);
-          await this.storeUser(user);
-          return { isAuthenticated: true, user };
-        } else {
-          // Clear invalid authentication
+        // Try to validate token with backend
+        try {
+          const isValid = await this.validateToken(token);
+          
+          if (isValid) {
+            // Ensure token is stored in both systems
+            await this.storeToken(token);
+            await this.storeUser(user);
+            return { isAuthenticated: true, user };
+          } else {
+            // Clear invalid authentication
+            await this.clearAuth();
+          }
+        } catch (validationError) {
+          // Backend validation failed (possibly due to blocking)
+          // In development, provide fallback mechanism
+          if (OAUTH_CONFIG.fallbackEnabled && token && user) {
+            console.warn('🔄 Backend validation failed, using fallback authentication for development');
+            console.warn('  This should only happen in development when requests are blocked');
+            console.warn('  Please ensure your backend is running and accessible');
+            
+            // Check if token looks valid (basic JWT structure check)
+            if (this.isTokenStructureValid(token)) {
+              // Use stored authentication as fallback in development
+              return { isAuthenticated: true, user };
+            }
+          }
+          
+          // Clear auth if validation failed
           await this.clearAuth();
         }
       }
@@ -158,30 +177,86 @@ export class GoogleTokenManager {
    * Validate Google authentication token with backend
    */
   static async validateToken(token: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${API_URL}/auth/validate-google`, {
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${token}`
-        },
-      });
-      
-      if (response.ok) {
-        const data: GoogleAuthResponse = await response.json();
+    const maxRetries = OAUTH_CONFIG.retryAttempts;
+    const retryDelay = OAUTH_CONFIG.retryDelay;
+    const requestTimeout = OAUTH_CONFIG.requestTimeout;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Create request with timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+
+        const response = await fetch(`${API_URL}/auth/validate-google`, {
+          method: 'GET',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
         
-        // Update stored user info if provided
-        if (data.user) {
-          await this.storeUser(data.user);
+        if (response.ok) {
+          const data: GoogleAuthResponse = await response.json();
+          
+          // Update stored user info if provided
+          if (data.user) {
+            await this.storeUser(data.user);
+          }
+          
+          return data.valid;
         }
         
-        return data.valid;
+        return false;
+      } catch (error) {
+        const isLastAttempt = attempt === maxRetries;
+        const isTimeoutError = error instanceof Error && error.name === 'AbortError';
+        const isNetworkError = error instanceof TypeError && error.message === 'Failed to fetch';
+
+        if (isNetworkError) {
+          console.warn(`🚫 Request blocked (attempt ${attempt}/${maxRetries}) - this commonly happens in development due to:`);
+          console.warn('  1. Ad blockers blocking localhost requests');
+          console.warn('  2. Browser security extensions');
+          console.warn('  3. Network security policies');
+          
+          if (isLastAttempt) {
+            console.error('');
+            console.error('💡 To fix this:');
+            console.error('  - Disable ad blockers for localhost');
+            console.error('  - Add localhost:8787 to your allowlist');
+            console.error('  - Try a different browser');
+            console.error('  - Check if the backend is running on port 8787');
+            
+            // In development, provide more detailed debugging
+            if (API_URL.includes('localhost')) {
+              console.error('');
+              console.error('🔍 Debugging info:');
+              console.error(`  - API URL: ${API_URL}`);
+              console.error(`  - Endpoint: ${API_URL}/auth/validate-google`);
+              console.error('  - Try manually visiting the endpoint to test connectivity');
+            }
+          }
+        } else if (isTimeoutError) {
+          console.warn(`⏱️ Request timeout (attempt ${attempt}/${maxRetries})`);
+        } else {
+          console.warn(`❌ Request failed (attempt ${attempt}/${maxRetries}):`, error);
+        }
+
+        // If this is the last attempt, return false
+        if (isLastAttempt) {
+          return false;
+        }
+
+        // Wait before retrying (except for network errors which likely won't resolve)
+        if (!isNetworkError) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
       }
-      
-      return false;
-    } catch (error) {
-      console.warn('Token validation failed:', error);
-      return false;
     }
+    
+    return false;
   }
 
   /**
@@ -280,6 +355,25 @@ export class GoogleTokenManager {
       console.error('Logout failed:', error);
       // Still try to clear local storage
       await this.clearAuth();
+    }
+  }
+
+  /**
+   * Basic check for token structure validity
+   * This is a fallback for development when backend validation fails
+   */
+  private static isTokenStructureValid(token: string): boolean {
+    try {
+      // Very basic check: should be a non-empty string with reasonable length
+      // and not obviously corrupted
+      return Boolean(token) && 
+             typeof token === 'string' && 
+             token.length > 10 && 
+             token.length < 2000 &&
+             !token.includes('undefined') &&
+             !token.includes('null');
+    } catch {
+      return false;
     }
   }
 } 

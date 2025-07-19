@@ -48,12 +48,19 @@ export const WorldSelectionScreen: React.FC<Props> = ({ navigation }) => {
       
       const worldsData = await getAllWorlds(token);
       setWorlds(worldsData);
+      
     } catch (error) {
-      console.error('Failed to load worlds:', error);
-      // If there's an auth error, redirect to login
-      if (error instanceof Error && error.message.includes('authentication')) {
+      console.error('Error loading worlds:', error);
+      
+      // Check if it's a network/blocking error
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        setError('Unable to connect to server. If you\'re in development mode, this might be due to ad blockers or browser security. Please check the console for troubleshooting tips.');
+      } else if (error instanceof Error && error.message.includes('Authentication')) {
+        // Authentication-related errors - redirect to login
         navigation.getParent()?.navigate('GoogleAuth');
+        return;
       } else {
+        // Generic error
         setError('Failed to load worlds. Please try again.');
       }
     } finally {

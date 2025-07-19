@@ -210,17 +210,23 @@ export class CrossPlatformOAuthService {
         }
 
         // Check if popup was closed manually
-        if (popup.closed) {
-          if (!resolved) {
-            resolved = true;
-            cleanup();
-            resolve({
-              success: false,
-              cancelled: true,
-              error: 'Authentication cancelled'
-            });
+        try {
+          if (popup.closed) {
+            if (!resolved) {
+              resolved = true;
+              cleanup();
+              resolve({
+                success: false,
+                cancelled: true,
+                error: 'Authentication cancelled'
+              });
+            }
+            return;
           }
-          return;
+        } catch (error) {
+          // Cross-Origin-Opener-Policy might block access to popup.closed
+          // This is normal behavior in some browsers/environments
+          // We'll continue with other checks
         }
 
         // Check if authentication completed
