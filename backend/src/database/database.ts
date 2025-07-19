@@ -275,6 +275,24 @@ export class DatabaseService {
     return result;
   }
 
+  async updateChapterTitleAndDescription(chapterId: number, title: string, description: string): Promise<Chapter> {
+    const result = await this.db
+      .prepare(`
+        UPDATE chapters 
+        SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ? 
+        RETURNING *
+      `)
+      .bind(title, description, chapterId)
+      .first<Chapter>();
+    
+    if (!result) {
+      throw new Error('Failed to update chapter title and description');
+    }
+    
+    return result;
+  }
+
   async completeCurrentChapter(sessionId: string): Promise<void> {
     await this.db
       .prepare(`

@@ -115,11 +115,12 @@ export class StoryService {
       // Apply feedback modifications synchronously if needed
       let updatedCurrentChapter = currentChapter;
       if (feedbackOutput.modifications.currentChapterModified) {
-        updatedCurrentChapter = await this.db.updateChapterDescription(
+        updatedCurrentChapter = await this.db.updateChapterTitleAndDescription(
           currentChapter.id,
+          feedbackOutput.updatedCurrentChapter.title,
           feedbackOutput.updatedCurrentChapter.description
         );
-        Logger.info(`✅ Updated current chapter description based on feedback for optimizer`);
+        Logger.info(`✅ Updated current chapter title and description based on feedback for optimizer`);
       }
 
       if (feedbackOutput.modifications.futureChaptersModified) {
