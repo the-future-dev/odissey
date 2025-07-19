@@ -247,13 +247,7 @@ export function getElapsed(startTime: number): number {
   return Date.now() - startTime;
 }
 
-/**
- * Generate a secure random token for anonymous authentication
- */
-export function generateToken(): string {
-  // Generate a secure random token using crypto.randomUUID()
-  return crypto.randomUUID() + '-' + Date.now().toString(36);
-}
+
 
 /**
  * Generate a unique session ID
@@ -347,14 +341,7 @@ export function validateRequiredFields(
   return null;
 }
 
-/**
- * Calculate token expiration date (default: 30 days)
- */
-export function calculateTokenExpiration(daysFromNow: number = 30): Date {
-  const expirationDate = new Date();
-  expirationDate.setDate(expirationDate.getDate() + daysFromNow);
-  return expirationDate;
-}
+
 
 /**
  * Log request information for debugging (optimized to reduce noise)

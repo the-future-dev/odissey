@@ -74,7 +74,7 @@ export class GeminiProvider implements AIProvider {
       }
 
       const data = await response.json() as any;
-      console.log('Gemini API Response structure:', JSON.stringify({
+      console.debug('Gemini API Response structure:', JSON.stringify({
         candidatesCount: data.candidates?.length || 0,
         hasContent: !!data.candidates?.[0]?.content,
         finishReason: data.candidates?.[0]?.finishReason
