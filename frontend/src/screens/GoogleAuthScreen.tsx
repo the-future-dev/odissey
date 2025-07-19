@@ -4,6 +4,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { API_URL } from '../config';
 import { GoogleTokenManager } from '../api/googleAuth';
+import { CrossPlatformOAuthService } from '../services/CrossPlatformOAuthService';
+import { ErrorHandlingService, ErrorDisplayInfo } from '../services/ErrorHandlingService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GoogleAuth'>;
 
@@ -12,6 +14,10 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
   const [authError, setAuthError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [errorInfo, setErrorInfo] = useState<ErrorDisplayInfo | null>(null);
+  const [retryAttempts, setRetryAttempts] = useState(0);
+  const oauthService = CrossPlatformOAuthService.getInstance();
+  const errorHandler = ErrorHandlingService.getInstance();
 
   useEffect(() => {
     checkExistingAuth();
@@ -19,169 +25,86 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
 
   const checkExistingAuth = async () => {
     try {
-      const existingAuth = await GoogleTokenManager.checkExistingAuth();
+      const existingAuth = await oauthService.checkExistingAuth();
       if (existingAuth.isAuthenticated && existingAuth.user) {
         setUser(existingAuth.user);
         // Navigate to world selection if already authenticated
         navigation.replace('MainTabs');
       }
     } catch (error) {
-      console.warn('Failed to check existing auth:', error);
+      // Failed to check existing auth, proceed with normal flow
     } finally {
       setIsCheckingAuth(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
+    // Prevent multiple simultaneous attempts
+    if (oauthService.isAuthenticationInProgress()) {
+      return;
+    }
+
     try {
       setIsAuthenticating(true);
       setAuthError(null);
-
-      const authUrl = `${API_URL}/auth/google`;
       
-      // Check if we're in a browser environment
-      if (typeof window !== 'undefined') {
-        // Browser: Use popup with event listeners
-        await handleBrowserAuth(authUrl);
+      const result = await oauthService.authenticate();
+      
+      if (result.success) {
+        setUser(result.user);
+        setErrorInfo(null);
+        setRetryAttempts(0);
+        handleAuthSuccess(result.user);
+      } else if (result.cancelled) {
+        setAuthError('Authentication was cancelled. Please try again.');
+        setErrorInfo(null);
       } else {
-        // Mobile: Use Linking with focus detection
-        const supported = await Linking.canOpenURL(authUrl);
-        if (supported) {
-          await Linking.openURL(authUrl);
-          setupMobileAuthListener();
-        } else {
-          throw new Error('Cannot open authentication URL');
-        }
+        const errorDisplayInfo = errorHandler.getErrorDisplayInfo(new Error(result.error || 'Authentication failed'));
+        setErrorInfo(errorDisplayInfo);
+        setAuthError(errorDisplayInfo.message);
+        setRetryAttempts(prev => prev + 1);
       }
     } catch (error) {
-      console.error('Authentication failed:', error);
-      setAuthError('Failed to start authentication. Please try again.');
+      errorHandler.logError(error, 'google_signin');
+      const errorDisplayInfo = errorHandler.getErrorDisplayInfo(error);
+      setErrorInfo(errorDisplayInfo);
+      setAuthError(errorDisplayInfo.message);
+      setRetryAttempts(prev => prev + 1);
+    } finally {
       setIsAuthenticating(false);
     }
   };
 
-  const handleBrowserAuth = async (authUrl: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      // Open popup
-      const popup = window.open(
-        authUrl,
-        'google-auth',
-        'width=500,height=600,scrollbars=yes,resizable=yes'
-      );
-
-      if (!popup) {
-        reject(new Error('Popup blocked. Please allow popups and try again.'));
-        return;
-      }
-
-      let resolved = false;
-
-      // Listen for postMessage from popup
-      const messageListener = (event: MessageEvent) => {
-        if (event.origin !== new URL(authUrl).origin) return;
-        
-        if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
-          if (!resolved) {
-            resolved = true;
-            cleanup();
-            // Store the auth data immediately from the message
-            if (event.data.token) {
-              GoogleTokenManager.storeToken(event.data.token);
-            }
-            if (event.data.user) {
-              GoogleTokenManager.storeUser(event.data.user);
-              handleAuthSuccess(event.data.user);
-            } else {
-              handleAuthSuccess();
-            }
-            resolve();
-          }
-        }
-      };
-
-      // Use periodic auth checking instead of popup.closed (which triggers COOP errors)
-      const authChecker = setInterval(async () => {
-        if (!resolved) {
-          const authResult = await GoogleTokenManager.checkExistingAuth();
-          if (authResult.isAuthenticated && authResult.user) {
-            resolved = true;
-            cleanup();
-            handleAuthSuccess(authResult.user);
-            resolve();
-          }
-        }
-      }, 1000);
-
-      const cleanup = () => {
-        window.removeEventListener('message', messageListener);
-        clearInterval(authChecker);
-        // Close popup without checking .closed property to avoid COOP errors
-        try {
-          popup.close();
-        } catch (error) {
-          // Ignore any errors when closing popup
-        }
-      };
-
-      window.addEventListener('message', messageListener);
-
-      // Timeout
-      setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          cleanup();
-          reject(new Error('Authentication timed out'));
-        }
-      }, 300000); // 5 minutes
-    });
-  };
-
-  const setupMobileAuthListener = () => {
-    // For mobile apps, listen for app focus events
-    const handleAppStateChange = async () => {
-      await checkAuthCompletion();
-    };
-
-    // Simple timeout check for mobile
-    setTimeout(async () => {
-      await checkAuthCompletion();
-    }, 5000);
-  };
-
-  const checkAuthCompletion = async () => {
-    try {
-      const authResult = await GoogleTokenManager.checkExistingAuth();
-      if (authResult.isAuthenticated && authResult.user) {
-        handleAuthSuccess(authResult.user);
-        return true;
-      }
-      
-      // If still no auth after popup close, show error
-      if (isAuthenticating) {
-        setAuthError('Authentication was not completed. Please try again.');
-        setIsAuthenticating(false);
-      }
-      return false;
-    } catch (error) {
-      console.warn('Auth completion check failed:', error);
-      if (isAuthenticating) {
-        setAuthError('Authentication verification failed. Please try again.');
-        setIsAuthenticating(false);
-      }
-      return false;
-    }
-  };
-
-  const handleAuthSuccess = (user?: any) => {
+  const handleAuthSuccess = async (user?: any) => {
     setIsAuthenticating(false);
     if (user) setUser(user);
+    
     navigation.replace('MainTabs');
   };
 
-  const handleTryAgain = () => {
+  const handleTryAgain = async () => {
     setAuthError(null);
+    setErrorInfo(null);
     setIsAuthenticating(false);
     setIsCheckingAuth(false);
+    
+    // Clear any existing auth state if this is a retry after multiple attempts
+    if (retryAttempts > 2) {
+      try {
+        await oauthService.signOut();
+        setRetryAttempts(0);
+      } catch (error) {
+        errorHandler.logError(error, 'clear_auth_state');
+      }
+    }
+  };
+
+  const handleRetryAuthentication = async () => {
+    if (errorInfo?.retryable) {
+      await handleGoogleSignIn();
+    } else {
+      await handleTryAgain();
+    }
   };
 
   // Loading state while checking existing auth
@@ -244,16 +167,47 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
           </View>
 
           <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>⚠️ Authentication Failed</Text>
+            <Text style={styles.errorText}>
+              {errorInfo?.severity === 'critical' ? '🚫' : 
+               errorInfo?.severity === 'high' ? '⚠️' : 
+               errorInfo?.retryable ? '🔄' : '❌'} {errorInfo?.title || 'Authentication Failed'}
+            </Text>
             <Text style={styles.errorDescription}>{authError}</Text>
+            
+            {retryAttempts > 1 && (
+              <Text style={styles.retryInfo}>
+                Attempt {retryAttempts}/3
+              </Text>
+            )}
+            
+            {errorInfo?.userFriendlyCode && (
+              <Text style={styles.errorCode}>
+                Error Code: {errorInfo.userFriendlyCode}
+              </Text>
+            )}
           </View>
 
-          <TouchableOpacity 
-            style={styles.primaryButton} 
-            onPress={handleTryAgain}
-          >
-            <Text style={styles.primaryButtonText}>Try Again</Text>
-          </TouchableOpacity>
+          <View style={styles.errorActions}>
+            {errorInfo?.retryable && (
+              <TouchableOpacity 
+                style={styles.primaryButton} 
+                onPress={handleRetryAuthentication}
+              >
+                <Text style={styles.primaryButtonText}>
+                  {retryAttempts > 1 ? 'Retry Authentication' : 'Try Again'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            
+            {!errorInfo?.retryable || retryAttempts > 2 ? (
+              <TouchableOpacity 
+                style={styles.secondaryButton} 
+                onPress={handleTryAgain}
+              >
+                <Text style={styles.secondaryButtonText}>Start Over</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
       </View>
     );
@@ -290,7 +244,9 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
             onPress={handleGoogleSignIn}
             disabled={isAuthenticating}
           >
-            <Text style={styles.googleButtonText}>🔐 Sign in with Google</Text>
+            <Text style={styles.googleButtonText}>
+              🔐 Sign in with Google
+            </Text>
           </TouchableOpacity>
           
           <Text style={styles.authNote}>
@@ -456,6 +412,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#94A3B8',
     marginTop: 16,
+    textAlign: 'center',
+  },
+  retryInfo: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  errorCode: {
+    fontSize: 10,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    fontFamily: 'monospace',
+  },
+  errorActions: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#8B5CF6',
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 12,
+    minWidth: 200,
+    alignSelf: 'center',
+  },
+  secondaryButtonText: {
+    color: '#8B5CF6',
+    fontSize: 16,
+    fontWeight: '600',
     textAlign: 'center',
   },
 }); 

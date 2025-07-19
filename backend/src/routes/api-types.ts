@@ -1,14 +1,5 @@
 // === API REQUEST/RESPONSE TYPES ===
 
-export interface CreateAnonymousTokenRequest {
-  // No body required
-}
-
-export interface CreateAnonymousTokenResponse {
-  token: string;
-  expiresAt: string;
-}
-
 export interface CreateSessionResponse {
   sessionId: string;
   worldId: string;

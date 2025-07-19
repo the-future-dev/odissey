@@ -118,7 +118,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const existingSession = await SessionManager.getSessionByWorld(worldId);
       
       if (existingSession.session && existingSession.messages) {
-        console.log(`Resuming existing session for world ${worldId}`);
         setCurrentSession(existingSession.session);
         setMessages(existingSession.messages);
         setIsSessionLoading(false);
@@ -126,7 +125,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
 
       // No existing session, create a new one
-      console.log(`Creating new session for world ${worldId}`);
       const token = await GoogleTokenManager.getValidToken();
       
       if (!token) {
@@ -205,7 +203,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const existingSession = await SessionManager.getSessionByWorld(worldId);
       
       if (existingSession.session && existingSession.messages) {
-        console.log(`Switching to existing session for world ${worldId}`);
         setCurrentSession(existingSession.session);
         setMessages(existingSession.messages);
       } else {

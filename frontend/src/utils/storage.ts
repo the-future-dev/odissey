@@ -112,10 +112,8 @@ function createPlatformStorage(): StorageInterface {
   const isWeb = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
   
   if (isWeb) {
-    console.log('Using localStorage for web platform');
     return new WebStorage();
   } else {
-    console.log('Using AsyncStorage for React Native platform');
     return new ReactNativeStorage();
   }
 }
@@ -301,8 +299,6 @@ export class SessionManager {
       await Promise.all(
         sessionsToRemove.map(session => this.removeSessionByWorld(session.worldId))
       );
-
-      console.log(`Cleaned up ${sessionsToRemove.length} old sessions`);
     } catch (error) {
       console.error('Failed to cleanup old sessions:', error);
     }

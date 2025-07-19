@@ -11,25 +11,7 @@ export class DatabaseService {
 
   // === USER MANAGEMENT ===
 
-  async createAnonymousUser(token: string, expiresAt: Date): Promise<User> {
-    const result = await this.db
-      .prepare('INSERT INTO users (token, expires_at) VALUES (?, ?) RETURNING *')
-      .bind(token, expiresAt.toISOString())
-      .first<User>();
-    
-    if (!result) {
-      throw new Error('Failed to create user');
-    }
-    
-    return result;
-  }
 
-  async getUserByToken(token: string): Promise<User | null> {
-    return await this.db
-      .prepare('SELECT * FROM users WHERE token = ? AND expires_at > CURRENT_TIMESTAMP')
-      .bind(token)
-      .first<User>();
-  }
 
   async updateUserLastSeen(userId: number): Promise<void> {
     await this.db

@@ -31,6 +31,42 @@ export class GoogleAuthRouter {
   constructor(env: Env) {
     this.db = new DatabaseService(env.DB);
     this.env = env;
+    this.validateOAuthConfiguration();
+  }
+
+  /**
+   * Validate OAuth configuration on startup
+   */
+  private validateOAuthConfiguration(): void {
+    const errors: string[] = [];
+    
+    if (!this.env.GOOGLE_CLIENT_ID) {
+      errors.push('GOOGLE_CLIENT_ID environment variable is not set');
+    } else if (this.env.GOOGLE_CLIENT_ID.includes('1234567890') || this.env.GOOGLE_CLIENT_ID === 'your-client-id') {
+      errors.push('GOOGLE_CLIENT_ID is using a placeholder value');
+    }
+    
+    if (!this.env.GOOGLE_CLIENT_SECRET) {
+      errors.push('GOOGLE_CLIENT_SECRET environment variable is not set');
+    } else if (this.env.GOOGLE_CLIENT_SECRET.includes('your-secret') || this.env.GOOGLE_CLIENT_SECRET === 'placeholder') {
+      errors.push('GOOGLE_CLIENT_SECRET is using a placeholder value');
+    }
+    
+    if (errors.length > 0) {
+      console.error('❌ Google OAuth Configuration Errors:');
+      errors.forEach(error => console.error(`  - ${error}`));
+      console.error('');
+      console.error('To fix these issues:');
+      console.error('1. Get OAuth credentials from: https://console.cloud.google.com/apis/credentials');
+      console.error('2. Set secrets using Wrangler:');
+      console.error('   wrangler secret put GOOGLE_CLIENT_ID');
+      console.error('   wrangler secret put GOOGLE_CLIENT_SECRET');
+      console.error('3. Deploy your changes');
+      console.error('');
+      console.error('OAuth authentication will fail until these are configured properly!');
+    } else {
+      console.log('✅ Google OAuth configuration validated successfully');
+    }
   }
 
   async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
@@ -47,6 +83,10 @@ export class GoogleAuthRouter {
     
     if (pathname === '/auth/google/callback' && method === 'GET') {
       return await this.handleGoogleCallback(request);
+    }
+    
+    if (pathname === '/auth/google/mobile-callback' && method === 'POST') {
+      return await this.handleMobileCallback(request);
     }
     
     if (pathname === '/auth/validate-google' && method === 'GET') {
@@ -70,6 +110,15 @@ export class GoogleAuthRouter {
    */
   private async initiateGoogleAuth(request: Request): Promise<Response> {
     try {
+      // Check OAuth configuration before proceeding
+      if (!this.env.GOOGLE_CLIENT_ID || !this.env.GOOGLE_CLIENT_SECRET) {
+        return createErrorResponse(
+          'OAuth is not properly configured. Please contact system administrator.',
+          500,
+          'Configuration Error'
+        );
+      }
+
       const url = new URL(request.url);
       const redirectUri = this.getRedirectUri(url);
       
@@ -148,6 +197,49 @@ export class GoogleAuthRouter {
     } catch (error) {
       console.error('Error handling Google callback:', error);
       return this.createCallbackErrorPage('Authentication failed. Please try again.');
+    }
+  }
+
+  /**
+   * Handle mobile OAuth callback
+   * Exchange authorization code for tokens and return JSON response
+   */
+  private async handleMobileCallback(request: Request): Promise<Response> {
+    try {
+      const body = await parseJsonBody(request) as { code?: string; state?: string; redirectUri?: string; codeVerifier?: string };
+      const { code, state, redirectUri, codeVerifier } = body;
+
+      if (!code) {
+        return createErrorResponse('Missing authorization code', 400);
+      }
+
+      // Exchange code for tokens (using mobile redirect URI and PKCE)
+      const tokenData = await this.exchangeCodeForTokensMobile(code, redirectUri || '', codeVerifier);
+      
+      // Get user info from Google
+      const userInfo = await this.fetchGoogleUserInfo(tokenData.access_token);
+      
+      // Create or update user in our database
+      const user = await this.createOrUpdateUser(userInfo);
+      
+      // Create OAuth session
+      const oauthSession = await this.createOAuthSession(user.id, tokenData);
+      
+      // Return JSON response for mobile
+      return createJsonResponse({
+        success: true,
+        token: oauthSession.access_token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          picture_url: user.picture_url
+        }
+      });
+
+    } catch (error) {
+      console.error('Error handling mobile callback:', error);
+      return createErrorResponse('Mobile authentication failed', 500);
     }
   }
 
@@ -346,6 +438,36 @@ export class GoogleAuthRouter {
     if (!response.ok) {
       const errorData = await response.text();
       throw new Error(`Token exchange failed: ${response.status} ${errorData}`);
+    }
+
+    return await response.json();
+  }
+
+  private async exchangeCodeForTokensMobile(code: string, redirectUri: string, codeVerifier?: string): Promise<GoogleTokenResponse> {
+    const tokenParams: Record<string, string> = {
+      client_id: this.env.GOOGLE_CLIENT_ID || '',
+      client_secret: this.env.GOOGLE_CLIENT_SECRET || '',
+      code: code,
+      grant_type: 'authorization_code',
+      redirect_uri: redirectUri,
+    };
+    
+    // Add code verifier for PKCE if provided
+    if (codeVerifier) {
+      tokenParams.code_verifier = codeVerifier;
+    }
+    
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams(tokenParams),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`Mobile token exchange failed: ${response.status} ${errorData}`);
     }
 
     return await response.json();

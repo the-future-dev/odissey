@@ -121,7 +121,7 @@ export class GoogleTokenManager {
           try {
             user = JSON.parse(userStr);
           } catch (e) {
-            console.warn('Failed to parse user from localStorage:', e);
+            // Failed to parse user from localStorage, will proceed without it
           }
         }
       }
@@ -149,7 +149,6 @@ export class GoogleTokenManager {
 
       return { isAuthenticated: false };
     } catch (error) {
-      console.warn('Failed to check existing auth:', error);
       await this.clearAuth();
       return { isAuthenticated: false };
     }
@@ -188,6 +187,7 @@ export class GoogleTokenManager {
   /**
    * Get a valid Google authentication token
    * Returns null if not authenticated
+   * Automatically attempts to refresh token if needed
    */
   static async getValidToken(): Promise<string | null> {
     try {
@@ -202,13 +202,53 @@ export class GoogleTokenManager {
       if (isValid) {
         return token;
       } else {
-        await this.clearAuth();
-        return null;
+        // Token is invalid, try to refresh it
+        const refreshed = await this.refreshTokenIfPossible();
+        if (refreshed) {
+          return await this.getStoredToken();
+        } else {
+          await this.clearAuth();
+          return null;
+        }
       }
     } catch (error) {
       console.error('Failed to get valid token:', error);
       await this.clearAuth();
       return null;
+    }
+  }
+
+  /**
+   * Attempt to refresh the current token using the refresh token stored server-side
+   */
+  static async refreshTokenIfPossible(): Promise<boolean> {
+    try {
+      const token = await this.getStoredToken();
+      if (!token) return false;
+
+      // Call the backend validation endpoint which will attempt refresh if needed
+      const response = await fetch(`${API_URL}/auth/validate-google`, {
+        method: 'GET',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        },
+      });
+      
+      if (response.ok) {
+        const data: GoogleAuthResponse = await response.json();
+        
+        if (data.valid && data.user) {
+          // Backend may have refreshed the token, but we keep using the same token
+          // since the backend manages refresh tokens server-side
+          await this.storeUser(data.user);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      console.warn('Token refresh attempt failed:', error);
+      return false;
     }
   }
 
