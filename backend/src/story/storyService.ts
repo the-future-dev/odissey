@@ -52,15 +52,14 @@ export class StoryService {
       });
 
       // Generate initial chapters synchronously - user needs the first chapter to start
-      const predictorOutput = await this.storyPredictor.predictFutureChapters({
-        storyModel,
-        historyChapters: []
+      const storyOutput = await this.storyPredictor.initializeChapters({
+        storyModel
       });
 
       // Store chapters and set first as current
-      await this.initializeChaptersWithFirstAsCurrent(session.id, predictorOutput.futureChapters);
+      await this.initializeChaptersWithFirstAsCurrent(session.id, storyOutput.currentChapter, storyOutput.futureChapters);
 
-      Logger.info(`✅ Session initialized with ${predictorOutput.futureChapters.length} chapters (first chapter set as current)`);
+      Logger.info(`✅ Session initialized with current chapter + ${storyOutput.futureChapters.length} future chapters`);
     } catch (error) {
       Logger.error(`❌ Failed to initialize session: ${error instanceof Error ? error.message : String(error)}`);
       throw new Error('Failed to initialize session');
@@ -97,51 +96,18 @@ export class StoryService {
         this.db.getRecentSessionMessages(sessionId, 10)
       ]);
 
-      // Store user input immediately
       const userMessagePromise = this.db.createMessage(sessionId, 'user', userInput, currentChapterNumber);
 
-      // CONTINUOUS FEEDBACK: Run StoryPredictor feedback BEFORE optimizer
-      // This ensures the optimizer gets the freshly updated chapters
-      const chapters = await this.chapterManager.getAllChapters(sessionId);
-      const feedbackOutput = await this.storyPredictor.provideFeedback({
-        storyModel,
-        historyChapters: chapters.history,
-        currentChapter: chapters.current || currentChapter,
-        futureChapters: chapters.future,
-        recentMessages,
-        userInput
-      });
-
-      // Apply feedback modifications synchronously if needed
-      let updatedCurrentChapter = currentChapter;
-      if (feedbackOutput.modifications.currentChapterModified) {
-        updatedCurrentChapter = await this.db.updateChapterTitleAndDescription(
-          currentChapter.id,
-          feedbackOutput.updatedCurrentChapter.title,
-          feedbackOutput.updatedCurrentChapter.description
-        );
-        Logger.info(`✅ Updated current chapter title and description based on feedback for optimizer`);
-      }
-
-      if (feedbackOutput.modifications.futureChaptersModified) {
-        // Clear existing future chapters and create new ones
-        await this.db.clearFutureChapters(sessionId);
-        await this.chapterManager.storeFutureChapters(sessionId, feedbackOutput.updatedFutureChapters);
-        Logger.info(`✅ Updated future chapters based on feedback for optimizer`);
-      }
-
-      // Start optimizer with FRESHLY UPDATED CHAPTER and wait for it
       const optimizerOutput = await this.storyOptimizer.optimizeStory({
         storyModel,
-        currentChapter: updatedCurrentChapter, // Use the updated chapter
+        currentChapter,
         recentMessages: chapterMessages,
         userInput
       });
 
-      // Generate narrative response using the updated chapter
       const narratorOutput = await this.storyNarrator.generateNarrative({
         storyModel,
-        currentChapter: updatedCurrentChapter, // Use the updated chapter
+        currentChapter,
         recentMessages: chapterMessages,
         userInput,
         optimizerOutput
@@ -150,18 +116,31 @@ export class StoryService {
       // Format response immediately
       const response = `${narratorOutput.response}\n\n**Choose your next action:**\n1. ${narratorOutput.choices[0]}\n2. ${narratorOutput.choices[1]}\n3. ${narratorOutput.choices[2]}`;
 
+      // FEEDBACK LOOP:
+      // Run updateFutureChapters with the new: user input and narrator response
+      const chapters = await this.chapterManager.getAllChapters(sessionId);
+      const storyOutput = await this.storyPredictor.updateFutureChapters({
+        storyModel,
+        historyChapters: chapters.history,
+        currentChapter: chapters.current || currentChapter,
+        futureChapters: chapters.future,
+        recentMessages,
+        userInput,
+        narratorResponse: narratorOutput.response
+      });
+
       // Return response immediately for fastest user experience
-      // Handle lighter background operations asynchronously with ExecutionContext
+      // Handle background operations asynchronously with ExecutionContext
       if (ctx) {
         Logger.info(`🔄 Scheduling background operations with ExecutionContext for session ${sessionId}`);
-        ctx.waitUntil(this.handleBackgroundOperations(sessionId, response, currentChapterNumber, optimizerOutput.shouldTransition, userMessagePromise));
+        ctx.waitUntil(this.handleBackgroundOperations(sessionId, response, currentChapterNumber, optimizerOutput.shouldTransition, userMessagePromise, storyOutput));
       } else {
         Logger.warn(`⚠️  No ExecutionContext provided - background operations may be interrupted for session ${sessionId}`);
         // Fallback to fire-and-forget (not recommended for production)
-        this.handleBackgroundOperations(sessionId, response, currentChapterNumber, optimizerOutput.shouldTransition, userMessagePromise);
+        this.handleBackgroundOperations(sessionId, response, currentChapterNumber, optimizerOutput.shouldTransition, userMessagePromise, storyOutput);
       }
 
-      Logger.info(`✅ Generated response for session ${sessionId} with continuous feedback`);
+      Logger.info(`✅ Generated response for session ${sessionId} with feedback loop`);
       return response;
     } catch (error) {
       Logger.error(`❌ Failed to process user input: ${error instanceof Error ? error.message : String(error)}`);
@@ -196,31 +175,30 @@ export class StoryService {
   /**
    * Initialize chapters with first chapter set as current
    */
-  private async initializeChaptersWithFirstAsCurrent(sessionId: string, chapters: Array<{ title: string, description: string }>): Promise<void> {
-    if (chapters.length === 0) {
-      throw new Error('No chapters generated for initialization');
-    }
-
-    Logger.info(`📚 INITIALIZING ${chapters.length} chapters with first as current`);
+  private async initializeChaptersWithFirstAsCurrent(
+    sessionId: string, 
+    currentChapter: { title: string, description: string }, 
+    futureChapters: Array<{ title: string, description: string }>
+  ): Promise<void> {
+    Logger.info(`📚 INITIALIZING current chapter + ${futureChapters.length} future chapters`);
 
     try {
       // Create the first chapter as current
       const firstChapter = await this.db.createChapter(
         sessionId,
         1,
-        chapters[0].title,
-        chapters[0].description,
+        currentChapter.title,
+        currentChapter.description,
         'current'
       );
 
       Logger.info(`✅ First chapter created as current: "${firstChapter.title}"`);
 
       // Create remaining chapters as future
-      const remainingChapters = chapters.slice(1);
-      if (remainingChapters.length > 0) {
-        const futureChapters = [];
-        for (let i = 0; i < remainingChapters.length; i++) {
-          const chapterData = remainingChapters[i];
+      if (futureChapters.length > 0) {
+        const createdFutureChapters = [];
+        for (let i = 0; i < futureChapters.length; i++) {
+          const chapterData = futureChapters[i];
           const chapter = await this.db.createChapter(
             sessionId,
             i + 2, // Start from chapter 2
@@ -228,21 +206,21 @@ export class StoryService {
             chapterData.description,
             'future'
           );
-          futureChapters.push(chapter);
+          createdFutureChapters.push(chapter);
         }
 
-        console.log('\n📖 CHAPTERS INITIALIZED:');
-        console.log('='.repeat(60));
-        console.log(`📚 CURRENT Chapter 1: ${firstChapter.title}`);
-        console.log(`  └─ ${firstChapter.description}`);
-        console.log('\n📚 FUTURE CHAPTERS:');
-        futureChapters.forEach(chapter => {
-          console.log(`Chapter ${chapter.chapter_number}: ${chapter.title}`);
-          console.log(`  └─ ${chapter.description}`);
-        });
-        console.log('='.repeat(60));
+        // console.log('\n📖 CHAPTERS INITIALIZED:');
+        // console.log('='.repeat(60));
+        // console.log(`📚 CURRENT Chapter 1: ${firstChapter.title}`);
+        // console.log(`  └─ ${firstChapter.description}`);
+        // console.log('\n📚 FUTURE CHAPTERS:');
+        // createdFutureChapters.forEach(chapter => {
+        //   console.log(`Chapter ${chapter.chapter_number}: ${chapter.title}`);
+        //   console.log(`  └─ ${chapter.description}`);
+        // });
+        // console.log('='.repeat(60));
 
-        Logger.info(`✅ Initialized ${futureChapters.length} future chapters`);
+        Logger.info(`✅ Initialized ${createdFutureChapters.length} future chapters`);
       }
     } catch (error) {
       Logger.error(`❌ Failed to initialize chapters: ${error instanceof Error ? error.message : String(error)}`);
@@ -252,14 +230,14 @@ export class StoryService {
 
   /**
    * Handle non-blocking background operations after response is sent
-   * Now simplified since continuous feedback runs before optimizer
    */
   private async handleBackgroundOperations(
     sessionId: string, 
     response: string, 
     currentChapterNumber: number, 
     shouldTransition: boolean,
-    userMessagePromise: Promise<any>
+    userMessagePromise: Promise<any>,
+    storyOutput?: any
   ): Promise<void> {
     try {
       // Ensure user message is stored before narrator response
@@ -267,6 +245,26 @@ export class StoryService {
 
       // Store narrator response
       const narratorResponsePromise = this.db.createMessage(sessionId, 'narrator', response, currentChapterNumber);
+
+      // Apply story modifications if provided
+      if (storyOutput) {
+        // Apply any current chapter modifications
+        if (storyOutput.modifications.currentChapterModified) {
+          await this.db.updateChapterTitleAndDescription(
+            (await this.chapterManager.getCurrentChapter(sessionId))?.id!,
+            storyOutput.currentChapter.title,
+            storyOutput.currentChapter.description
+          );
+          Logger.info(`✅ Applied story feedback: Updated current chapter`);
+        }
+
+        // Apply future chapter modifications
+        if (storyOutput.modifications.futureChaptersModified || storyOutput.modifications.newChaptersAdded) {
+          await this.db.clearFutureChapters(sessionId);
+          await this.chapterManager.storeFutureChapters(sessionId, storyOutput.futureChapters);
+          Logger.info(`✅ Applied story feedback: Updated all future chapters`);
+        }
+      }
 
       // Handle chapter transition if needed (most expensive operation)
       if (shouldTransition) {

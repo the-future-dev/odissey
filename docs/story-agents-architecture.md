@@ -66,46 +66,56 @@ graph TD
 graph TD
     A["👤 User Input"] --> B["🎮 StoryService<br/>Main Coordinator"]
     
-    B --> C["📚 ChapterManager<br/>Retrieves Context"]
-    C --> C1["Context Data:<br/>• Current chapter<br/>• Chapter messages<br/>• Recent messages"]
+    B --> C["📚 ChapterManager<br/>Get Current Context"]
+    C --> C1["Retrieved Context:<br/>• Current chapter details<br/>• Chapter message history<br/>• Recent session messages"]
     
-    B --> D["🔄 StoryPredictor<br/>Continuous Feedback"]
-    D --> D1["Feedback Analysis:<br/>• Story trajectory<br/>• Character psychology<br/>• Narrative coherence<br/>• Chapter modifications"]
-    D1 --> D2["Updates:<br/>• Current chapter description<br/>• Future chapters roadmap<br/>• Story consistency"]
+    C1 --> D["🔧 StoryOptimizer<br/>Emotional Rhythm Analysis"]
+    D --> D1["Optimizer Analysis:<br/>• Sinusoidal pacing patterns<br/>• Emotional intensity tracking<br/>• Story beat decomposition<br/>• Chapter transition signals"]
     
-    D2 --> E["🔧 StoryOptimizer<br/>Emotional Rhythm Control"]
-    E --> E1["Sinusoidal Pacing:<br/>• Emotional intensity<br/>• Chapter decomposition<br/>• Transition signals<br/>• Rhythm phase tracking"]
-    E1 --> E2["Optimizer Output:<br/>• What happens next<br/>• Should transition (Y/N)<br/>• Updated decomposition"]
+    D1 --> E["🎭 StoryNarrator<br/>Generate Response"]
+    E --> E1["Narrative Creation:<br/>• Immersive storytelling<br/>• Following optimizer guidance<br/>• Generate user choices<br/>• Create engaging response"]
     
-    E2 --> F["🎭 StoryNarrator<br/>Response Generation"]
-    F --> F1["Narrative Creation:<br/>• Immersive storytelling<br/>• Following decomposition<br/>• Choice generation<br/>• User engagement"]
-    F1 --> F2["Response:<br/>• Story narrative<br/>• 3 user choices<br/>• Immediate delivery"]
+    E1 --> F["🔮 StoryPredictor<br/>Single Feedback Loop"]
+    F --> F1["Complete Analysis:<br/>• User input + narrator response<br/>• Story trajectory assessment<br/>• Chapter coherence check<br/>• Future planning updates"]
     
-    F2 --> G["🏃‍♂️ Background Operations<br/>(ExecutionContext)"]
-    G --> G1["Database Updates:<br/>• Store user message<br/>• Store narrator response<br/>• Update chapter data"]
-    G --> H["🔄 Chapter Transition<br/>(If signaled)"]
-    H --> H1["Transition Process:<br/>• Move current to history<br/>• Set next future as current<br/>• Update chapter states"]
+    F1 --> G["📱 Response Delivered<br/>Immediate User Experience"]
+    G --> G1["User Receives:<br/>• Story narrative<br/>• 3 meaningful choices<br/>• Instant interaction"]
     
-    B --> I["🗄️ Database<br/>Parallel Operations"]
-    I --> I1["Data Storage:<br/>• Message persistence<br/>• Chapter updates<br/>• State management"]
+    G1 --> H["🏃‍♂️ Background Operations<br/>(ExecutionContext)"]
+    H --> H1["Store Messages:<br/>• User input saved<br/>• Narrator response saved<br/>• Message persistence"]
+    
+    H1 --> I["📝 Apply Story Updates"]
+    I --> I1["Update Components:<br/>• Current chapter modifications<br/>• Future chapters adjustments<br/>• Story consistency maintained"]
+    
+    I1 --> J["🔄 Chapter Transition<br/>(If Signaled)"]
+    J --> J1["Transition Process:<br/>• Move current → history<br/>• Next future → current<br/>• Update chapter states<br/>• Maintain story flow"]
+    
+    J1 --> K["✅ Cycle Complete<br/>Ready for Next Interaction"]
     
     style A fill:#ffeb3b
     style B fill:#e1f5fe
     style C fill:#fff3e0
-    style D fill:#e8f5e8
-    style E fill:#f3e5f5
-    style F fill:#fce4ec
-    style G fill:#f0f4c3
-    style H fill:#e0f2f1
-    style I fill:#fce4ec
+    style D fill:#f3e5f5
+    style E fill:#fce4ec
+    style F fill:#e8f5e8
+    style G fill:#c8e6c9
+    style H fill:#f0f4c3
+    style I fill:#e1f5fe
+    style J fill:#e0f2f1
+    style K fill:#c8e6c9
 ```
 
-**Process:**
-1. **ChapterManager** retrieves current context and messages
-2. **StoryPredictor** analyzes trajectory and updates story elements for coherence
-3. **StoryOptimizer** determines emotional pacing and next story beats
-4. **StoryNarrator** generates immersive response with user choices
-5. **Background operations** handle database updates and potential chapter transitions
+**Sequential Process:**
+1. **User Input** triggers the story interaction flow
+2. **StoryService** coordinates all agents and manages the process
+3. **ChapterManager** retrieves current context and message history
+4. **StoryOptimizer** analyzes emotional pacing and determines story beats
+5. **StoryNarrator** generates immersive response with user choices
+6. **StoryPredictor** performs single feedback loop with complete interaction context
+7. **Response Delivered** immediately to user for optimal experience
+8. **Background Operations** handle database persistence and story updates
+9. **Chapter Transition** occurs if signaled by optimizer
+10. **System Ready** for the next user interaction
 
 ## Key Features
 

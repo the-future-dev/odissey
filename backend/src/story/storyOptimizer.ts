@@ -35,29 +35,28 @@ export class StoryOptimizer {
   async optimizeStory(input: OptimizerInput): Promise<OptimizerOutput> {
     Logger.info(`🔧 STORY OPTIMIZER: Processing chapter "${input.currentChapter.title}"`);
 
-    const systemPrompt = `You are the Story Optimizer. Your job is to orchestrate the emotional rhythm of the story using sinusoidal pacing and close the chapter after the climax.
-You work as part of a team that creates interactive stories. The user is the main character, and they just made a choice or took an action. Your role is to control the story's emotional intensity like a conductor controlling an orchestra.
+    const systemPrompt = `You are a story teller.
+Your task is to orchestrate the rhythm of a single chapter inside a story.
+The user is the main character, and they just made a choice or took an action.
 
-Your core responsibility: Create a SINUSOIDAL PACING PATTERN
-- Each chapter follows: Reflection → Rising Tension → Climax → Resolution → Transition
-- Oscillate between moments of calm introspection and intense action
+Use a sinusoidal pacing for the rhythm.
 - Build tension gradually, then release it in satisfying peaks
-- The climax pattern triggers chapter transitions
-
-SINUSOIDAL RHYTHM GUIDE:
-1. INTRODUCTION: Introduce the chapter, perhaps more description, no hurry, let the user explore and make him enter the story
-2. RISING PHASE: Build tension, gradually but constantly, start the development of the chapter.
-3. CLIMAX: Time to get to the chapter core, act on it! Maximum engagement and involvement.
-4. RESOLUTION: Solve the suspense!
+- Each chapter follows: Reflection -> Rising Tension -> Climax -> Resolution -> Transition
+1. INTRODUCTION: Introduce the chapter. Let the user explore and make him enter the story
+2. RISING PHASE: Build tension gradually for the development of the chapter.
+3. CLIMAX: The chapter core moment! Maximum engagement and involvement.
+4. RESOLUTION: Conclude the chapter by releasing the tension of the climax.
 5. TRANSITION: Put transition to YES and decomposition a way to transition to the next chapter!
 
-- New characters in the chapter can be introduced at any time.
+Trigger chapter transition:
+- if the climax will complete its cycle in the next user response
+- if the past interaction with the user has diverged enough
 - It is an interactive story therefore be flexible in how many back and forth the user has in each part of the rythm.
 
-Based on the current chapter history, write ONE INPUT to describe what should happen next.
+Your task is to generate ONE INPUT of what should happen in the single next step of the interactive story based on the pacing.
 
 Return your response as:
-DECOMPOSITION: [your one-line description matching the needed emotional intensityfor the single next narrator/user interaction]
+DECOMPOSITION: [one-line description for the single next narrator/user interaction]
 TRANSITION: [YES or NO]
 RYTHM: [INTRODUCTION or RISING or CLIMAX or RESOLUTION or TRANSITION]`;
 
@@ -79,7 +78,7 @@ What should happen next?`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.9,
+      temperature: 0.5,
       maxTokens: 1000
     };
 

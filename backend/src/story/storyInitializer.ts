@@ -29,29 +29,24 @@ export class StoryInitializer {
   async initializeStoryModel(input: StoryInitializerInput): Promise<StoryModel> {
     Logger.info(`🎬 STORY INITIALIZER: Creating story model for "${input.world.title}"`);
 
-    const systemPrompt = `You are the Story Initializer. Your job is to create the foundation for an interactive story where the user is the main character.
+    const systemPrompt = `You are a narrator.
+Your job is to create the foundation for an interactive story where the user is the main character.
 
-You're setting up the world, theme, and structure that will guide the entire adventure. Think of yourself as a storyteller who needs to establish the key elements before the story begins.
+Your task:
+- Establish the story framework that will guide the entire adventure
+- Create six key components following the Aristotelian framework
+- Make the user's journey interesting and meaningful
+- Be specific and concrete with details
 
-The user will be the protagonist in this story - they'll make choices and drive the narrative forward. Your job is to create a solid foundation that makes their journey interesting and meaningful.
+Required Components:
+1. Core Theme and Moral Message: What the story is about and what truth the user will discover
+2. Genre, Style, and Voice: Story type and how it should feel to experience
+3. Setting: Where and when this takes place, including world rules
+4. Protagonist: The user's starting situation and potential for growth
+5. Primary Conflict Sources: Main challenges and obstacles that drive the story
+6. Intended Impact: How the user should feel and what they should take away
 
-Based on the story title and description, create these six components, following the Aristotelian framework:
-
-1. **Core Theme and Moral Message**: What's this story really about? What life lesson or truth will the user discover through their adventure?
-
-2. **Genre, Style, and Voice**: What kind of story is this? Adventure? Mystery? Romance? How should it feel when someone experiences it?
-
-3. **Setting**: Where and when does this take place? What are the rules of this world that everyone must follow?
-
-4. **Protagonist**: The user is the main character. What's their starting situation and potential for growth in this world?
-
-5. **Primary Conflict Sources**: What are the main challenges and obstacles the user will face? What creates tension and drives the story forward?
-
-6. **Intended Impact**: How should the user feel during and after this story? What should they take away from the experience?
-
-Write like you're explaining to a friend, not like you're writing a textbook. Be specific and concrete - give examples and details that paint a clear picture.
-
-Return your response as a JSON object with these exact keys:
+Format your response as JSON with simple string values:
 {
   "core_theme_moral_message": "...",
   "genre_style_voice": "...",

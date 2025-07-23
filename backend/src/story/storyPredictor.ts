@@ -4,50 +4,42 @@ import { TextToTextRequest } from '../ai/interfaces';
 import { Logger } from '../utils';
 import { extractJsonFromResponse } from './mpcUtils';
 
-export interface PredictorInput {
+export interface InitializeChaptersInput {
   storyModel: StoryModel;
-  historyChapters: Chapter[];
 }
 
-export interface PredictorOutput {
-  futureChapters: Array<{
-    title: string;
-    description: string;
-  }>;
-  nextChapter: {
-    title: string;
-    description: string;
-  };
-}
-
-export interface FeedbackInput {
+export interface UpdateFutureChaptersInput {
   storyModel: StoryModel;
   historyChapters: Chapter[];
   currentChapter: Chapter;
   futureChapters: Chapter[];
   recentMessages: Message[];
   userInput: string;
+  narratorResponse: string;
 }
 
-export interface FeedbackOutput {
-  updatedCurrentChapter: {
+export interface StoryPredictorOutput {
+  currentChapter: {
     title: string;
     description: string;
   };
-  updatedFutureChapters: Array<{
+  futureChapters: Array<{
     title: string;
     description: string;
   }>;
   modifications: {
     currentChapterModified: boolean;
     futureChaptersModified: boolean;
+    newChaptersAdded: boolean;
     reasoning: string;
   };
 }
 
 /**
- * Story Predictor Agent - Computes future chapters and provides continuous feedback
- * Role: Plan the story's future direction and ensure coherence through feedback loops
+ * Story Predictor Agent - Manages the chapters of the story
+ * Functionality:
+ * - Initialize story chapters
+ * - Update them based on user interactions
  */
 export class StoryPredictor {
   private aiService: AIServiceManager;
@@ -57,70 +49,55 @@ export class StoryPredictor {
   }
 
   /**
-   * Continuous feedback method for story refinement
-   * Uses a greedy approach to ensure following the interactive storytelling path
-   * while minimizing deviations from the initially defined story
+   * Unified system prompt for full functionality
    */
-  async provideFeedback(input: FeedbackInput): Promise<FeedbackOutput> {
-    Logger.info(`🔄 STORY PREDICTOR: Providing feedback for current chapter "${input.currentChapter.title}"`);
+  private getSystemPrompt(): string {
+    return `You are an narrator.
+Your job is to manage the chapters of an interactive story!
 
-    const systemPrompt = `You are a master story architect and psychological narrative designer.
+Your tasks:
+- For story initialization: Create a complete roadmap of all chapters for the story
+- For story updates: Update the current chapter and all future chapters based on user interactions
 
-Your role is to continuously refine and enhance the story as it unfolds through user interactions. You are the guardian of narrative coherence and the architect of psychological depth.
+Task Guidelines:
+- The user is the protagonist of this story therefore its input is fundamental for the specifics inside a chapter
+- For the bigger picture, instead build the story towards the intended impact with non-trivial story development!
+- Each chapter should be substantial enough for meaningful interaction
+- Add/remove chapters naturally as the story demands
+- inside the current chapter: make MINIMAL changes to encompass ALL what actually changed
+- Process the user inputs to be meaningful in the story: with great impact on the current chapter but also with the next ones
+- Given the interactive nature of the current story telling be flexible: ex: allow for new character introduction.
 
-CORE PRINCIPLES:
-1. **Narrative Coherence**: Ensure the story remains true to its original vision while adapting to user choices
-2. **Psychological Evolution**: Develop characters with authentic psychological arcs and growth
-3. **Greedy Optimization**: Follow the most engaging path that user interactions are revealing
-4. **Suspense Engineering**: Use advanced storytelling techniques (escamotages) to create compelling tension
-5. **Adaptive Consistency**: Maintain thematic consistency while allowing organic story evolution
+CRITICAL: You MUST respond with ONLY valid JSON. No explanations, no markdown, no additional text.
 
-STORYTELLING ESCAMOTAGES (Advanced Techniques):
-- **Foreshadowing Layers**: Plant subtle hints that pay off later
-- **Psychological Mirrors**: Use secondary characters to reflect protagonist's internal conflicts
-- **Dramatic Irony**: Create situations where the reader knows more than the character
-- **Chekhov's Gun**: Introduce elements that will become crucial later
-- **Red Herrings**: Mislead while maintaining fair play
-- **Emotional Anchoring**: Tie plot developments to character emotional states
-- **Symbolic Threading**: Weave symbolic elements throughout the narrative
-- **Tension Oscillation**: Balance moments of relief with escalating stakes
-
-ANALYSIS FRAMEWORK:
-1. **Story Trajectory**: Where is the interactive story naturally heading?
-2. **Character Psychology**: How should characters evolve based on recent interactions?
-3. **Thematic Resonance**: Are we staying true to the core theme while exploring its depths?
-4. **Pacing Dynamics**: How can we enhance the emotional rhythm?
-5. **Narrative Gaps**: What elements need reinforcement or adjustment?
-
-MODIFICATION RULES:
-- NEVER alter completed chapters (history)
-- CAN modify current chapter description to better serve the emerging narrative
-- CAN restructure future chapters to follow the path user interactions are revealing
-- MUST maintain overall story coherence and intended impact
-- MUST enhance psychological depth and character development
-
-Based on the user's latest action and the story's current trajectory, analyze if the current chapter and future chapters need adjustment to create a more compelling, coherent, and psychologically rich narrative.
-
-Return your response as JSON:
+Format your response as valid JSON with double-quoted property names:
 {
-  "updatedCurrentChapter": {
-    "title": "Current chapter title (keep same if no change needed)",
-    "description": "Enhanced description that better serves the emerging narrative"
+  "currentChapter": {
+    "title": "Current/First chapter title",
+    "description": "Description of the current/first chapter"
   },
-  "updatedFutureChapters": [
+  "futureChapters": [
     {
       "title": "Future chapter title",
-      "description": "Refined description that follows the interactive path"
+      "description": "Description of future chapter"
     }
   ],
   "modifications": {
-    "currentChapterModified": true/false,
-    "futureChaptersModified": true/false,
-    "reasoning": "Detailed explanation of why modifications were made and how they enhance the story"
+    "currentChapterModified": true,
+    "futureChaptersModified": false,
+    "newChaptersAdded": false,
+    "reasoning": "Brief explanation of what changed and why"
   }
 }`;
+  }
 
-    const userPrompt = `STORY ANALYSIS REQUEST:
+  /**
+   * Update future chapters based on story progression and user interactions
+   */
+  async updateFutureChapters(input: UpdateFutureChaptersInput): Promise<StoryPredictorOutput> {
+    Logger.info(`🔄 STORY PREDICTOR: Updating future chapters for current chapter "${input.currentChapter.title}"`);
+
+    const userPrompt = `STORY UPDATE REQUEST:
 
 Original Story Framework:
 - Core Theme: ${input.storyModel.core_theme_moral_message}
@@ -130,7 +107,7 @@ Original Story Framework:
 - Conflicts: ${input.storyModel.conflict_sources}
 - Intended Impact: ${input.storyModel.intended_impact}
 
-Story History (Completed Chapters):
+Previously Completed Chapters:
 ${input.historyChapters.map(ch => `Chapter ${ch.chapter_number}: "${ch.title}"\n${ch.description}`).join('\n\n')}
 
 Current Chapter:
@@ -143,109 +120,24 @@ ${input.futureChapters.map((ch, i) => `Chapter ${input.historyChapters.length + 
 Recent User Interactions:
 ${input.recentMessages.slice(-5).map(msg => `${msg.type}: ${msg.content}`).join('\n')}
 
-Latest User Action: "${input.userInput}"
+New information:
+- Latest User Action: "${input.userInput}"
+- Latest Narrator Response: "${input.narratorResponse}"
 
-TASK: Analyze the story's current trajectory and provide feedback on whether the current chapter and future chapters need adjustment to create a more compelling, coherent, and psychologically rich narrative that follows the path the user interactions are revealing.`;
+TASK: Update the current chapter to encompass the new interactions and adjust all future chapters to ensure story coherence. Add or remove chapters as naturally needed for the story progression.`;
 
-    const request: TextToTextRequest = {
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.7,
-      maxTokens: 8000
-    };
-
-    try {
-      const response = await this.aiService.generateText(request);
-      const feedbackData = extractJsonFromResponse(response.content);
-      
-      // Validate response structure
-      if (!feedbackData.updatedCurrentChapter || !feedbackData.updatedFutureChapters || !feedbackData.modifications) {
-        throw new Error('Invalid feedback response structure');
-      }
-
-      const output: FeedbackOutput = {
-        updatedCurrentChapter: feedbackData.updatedCurrentChapter,
-        updatedFutureChapters: feedbackData.updatedFutureChapters,
-        modifications: feedbackData.modifications
-      };
-
-      // Log feedback results
-      if (output.modifications.currentChapterModified || output.modifications.futureChaptersModified) {
-        console.log('\n🔄 STORY PREDICTOR FEEDBACK:');
-        console.log('='.repeat(70));
-        console.log(`📝 Reasoning: ${output.modifications.reasoning}`);
-        console.log(`🔄 Current Chapter Modified: ${output.modifications.currentChapterModified}`);
-        console.log(`📚 Future Chapters Modified: ${output.modifications.futureChaptersModified}`);
-        
-        if (output.modifications.currentChapterModified) {
-          console.log(`\n📖 Updated Current Chapter: "${output.updatedCurrentChapter.title}"`);
-          console.log(`   Description: ${output.updatedCurrentChapter.description}`);
-        }
-        
-        if (output.modifications.futureChaptersModified) {
-          console.log(`\n📚 Updated Future Chapters: ${output.updatedFutureChapters.length} chapters`);
-          output.updatedFutureChapters.forEach((ch, i) => {
-            console.log(`   Chapter ${i + 1}: "${ch.title}"`);
-            console.log(`   Description: ${ch.description}`);
-          });
-        }
-        console.log('='.repeat(70));
-      } else {
-        Logger.info('✅ No story modifications needed - current trajectory is optimal');
-      }
-
-      return output;
-    } catch (error) {
-      Logger.error(`❌ Failed to provide story feedback: ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error('Failed to provide story feedback');
-    }
+    return await this.processStoryRequest(userPrompt, 'update');
   }
 
   /**
-   * Predict future chapters based on story progression
+   * Initialize chapters for a new story
    */
-  async predictFutureChapters(input: PredictorInput): Promise<PredictorOutput> {
-    const isInitialization = input.historyChapters.length === 0;
-    const logContext = isInitialization ? 'session initialization' : `completion of ${input.historyChapters.length} chapters`;
-    
-    Logger.info(`🔮 STORY PREDICTOR: Computing future chapters at ${logContext}`);
+  async initializeChapters(input: InitializeChaptersInput): Promise<StoryPredictorOutput> {
+    Logger.info(`🔮 STORY PREDICTOR: Initializing chapters for new story`);
 
-    const systemPrompt = `You are an experienced narrator.
-Your job is to plan the future chapters of an interactive story.
+    const userPrompt = `STORY INITIALIZATION REQUEST:
 
-Your task:
-- Create a comprehensive roadmap of future chapters
-- Build the story towards the intended impact
-- Provide variety while maintaining genre consistency  
-- The user is the protagonist of this story
-- Generate as many chapters as needed to complete the story arc
-- Each chapter should be substantial enough for meaningful interaction
-
-IMPORTANT: Plan chapters that will come AFTER the current story state. If there are completed chapters, build upon them. If this is initialization, plan the beginning of the story.
-
-Format your response as a JSON array of chapter objects:
-[
-  {
-    "title": "Chapter Title (engaging but not spoiling)",
-    "description": "Detailed description of what happens in this chapter and its purpose in the story"
-  },
-  {
-    "title": "Chapter Title", 
-    "description": "Description of the next chapter's events and story progression"
-  }
-]`;
-
-    const historyContext = input.historyChapters.length > 0 
-      ? `Completed Chapters:\n${input.historyChapters.map(ch => `Chapter ${ch.chapter_number}: "${ch.title}"\n${ch.description}`).join('\n\n')}`
-      : 'No chapters completed yet - this is story initialization.';
-
-    const contextDescription = isInitialization 
-      ? 'Plan the opening chapters to begin this interactive adventure.'
-      : `Plan the next chapters that should follow after the ${input.historyChapters.length} completed chapters.`;
-
-    const userPrompt = `Story Configuration:
+Story Configuration:
 - Core Theme: ${input.storyModel.core_theme_moral_message}
 - Genre & Style: ${input.storyModel.genre_style_voice}
 - Setting: ${input.storyModel.setting}
@@ -253,16 +145,18 @@ Format your response as a JSON array of chapter objects:
 - Main Conflicts: ${input.storyModel.conflict_sources}
 - Intended Impact: ${input.storyModel.intended_impact}
 
-Current Story State:
-${historyContext}
+TASK: Create a complete chapter roadmap for this interactive story. The first chapter will be the current chapter where the user begins their adventure, and the future chapters should provide a comprehensive path to achieve the story's intended impact.`;
 
-Task: ${contextDescription}
+    return await this.processStoryRequest(userPrompt, 'initialization');
+  }
 
-Create engaging chapters that advance the story meaningfully while maintaining the established tone and direction.`;
-
+  /**
+   * Unified processing method for both initialization and updates
+   */
+  private async processStoryRequest(userPrompt: string, context: 'initialization' | 'update'): Promise<StoryPredictorOutput> {
     const request: TextToTextRequest = {
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: this.getSystemPrompt() },
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.7,
@@ -271,48 +165,76 @@ Create engaging chapters that advance the story meaningfully while maintaining t
 
     try {
       const response = await this.aiService.generateText(request);
+      const storyData = extractJsonFromResponse(response.content);
       
-      const futureChapters = extractJsonFromResponse(response.content);
-      
-      if (!Array.isArray(futureChapters) || futureChapters.length === 0) {
-        throw new Error('Expected array of future chapters');
+      // Validate response structure
+      if (!storyData.currentChapter || !storyData.futureChapters || !storyData.modifications) {
+        throw new Error('Invalid story response structure');
+      }
+
+      // Validate each future chapter has required fields
+      if (!Array.isArray(storyData.futureChapters)) {
+        throw new Error('Future chapters must be an array');
       }
       
-      // Validate each chapter has required fields
-      for (const chapter of futureChapters) {
+      for (const chapter of storyData.futureChapters) {
         if (!chapter.title || !chapter.description) {
           throw new Error('Each chapter must have title and description');
         }
       }
 
-      // Log the FULL chapters list as requested
-      console.log('\n🔮 STORY PREDICTOR - FULL CHAPTERS FORWARD:');
-      console.log('='.repeat(80));
-      console.log(`📍 Context: ${logContext}`);
-      console.log(`📚 Generated ${futureChapters.length} future chapters:`);
-      console.log('-'.repeat(80));
-      
-      futureChapters.forEach((chapter, index) => {
-        console.log(`📖 Chapter ${index + 1}: "${chapter.title}"`);
-        console.log(`   Description: ${chapter.description}`);
-        console.log('-'.repeat(80));
-      });
-      
-      console.log(`🎯 NEXT CHAPTER TO ACTIVATE: "${futureChapters[0].title}"`);
-      console.log(`   This will be the active chapter for user interaction.`);
-      console.log('='.repeat(80));
-
-      const output: PredictorOutput = {
-        futureChapters,
-        nextChapter: futureChapters[0]
+      const output: StoryPredictorOutput = {
+        currentChapter: storyData.currentChapter,
+        futureChapters: storyData.futureChapters,
+        modifications: storyData.modifications
       };
 
-      Logger.info(`✅ Generated ${futureChapters.length} future chapters, next: "${futureChapters[0].title}"`);
+      // Log the results
+      if (context === 'initialization') {
+        console.log('\n🔮 STORY PREDICTOR - STORY INITIALIZATION:');
+        console.log('='.repeat(80));
+        console.log(`📖 CURRENT Chapter: "${output.currentChapter.title}"`);
+        console.log(`   Description: ${output.currentChapter.description}`);
+        console.log(`\n📚 Generated ${output.futureChapters.length} future chapters:`);
+        console.log('-'.repeat(80));
+        
+        output.futureChapters.forEach((chapter, index) => {
+          console.log(`📖 Chapter ${index + 2}: "${chapter.title}"`);
+          console.log(`   Description: ${chapter.description}`);
+          console.log('-'.repeat(80));
+        });
+        console.log('='.repeat(80));
+      } else {
+        // Update context logging
+        if (output.modifications.currentChapterModified || output.modifications.futureChaptersModified || output.modifications.newChaptersAdded) {
+          console.log('\n🔄 STORY PREDICTOR - FUTURE CHAPTERS UPDATE:');
+          console.log('='.repeat(70));
+          console.log(`📝 Reasoning: ${output.modifications.reasoning}`);
+          console.log(`🔄 Current Chapter Modified: ${output.modifications.currentChapterModified}`);
+          console.log(`📚 Future Chapters Modified: ${output.modifications.futureChaptersModified}`);
+          console.log(`✨ New Chapters Added: ${output.modifications.newChaptersAdded}`);
+          
+          if (output.modifications.currentChapterModified) {
+            console.log(`\n📖 Updated Current Chapter: "${output.currentChapter.title}"`);
+            console.log(`   Description: ${output.currentChapter.description}`);
+          }
+          
+          // console.log(`\n📚 All Future Chapters (${output.futureChapters.length} total):`);
+          // output.futureChapters.forEach((ch, i) => {
+          //   console.log(`   Chapter ${i + 1}: "${ch.title}"`);
+          //   console.log(`   Description: ${ch.description}`);
+          // });
+          // console.log('='.repeat(70));
+        } else {
+          Logger.info('✅ No story modifications needed - current trajectory is optimal');
+        }
+      }
 
+      Logger.info(`✅ Story ${context} completed: Current + ${output.futureChapters.length} future chapters`);
       return output;
     } catch (error) {
-      Logger.error(`❌ Failed to predict future chapters: ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error('Failed to predict future chapters');
+      Logger.error(`❌ Failed to process story ${context}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Failed to process story ${context}`);
     }
   }
 } 

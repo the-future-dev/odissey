@@ -98,8 +98,8 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
   const handleQuickSend = async (optionNumber: number, optionText: string) => {
     if (isInteracting) return;
 
-    // Send the choice number in a format the backend can detect
-    const choiceMessage = `${optionNumber}`;
+    // Send the full choice text instead of just the number
+    const choiceMessage = optionText;
 
     try {
       await sendMessage(choiceMessage);
