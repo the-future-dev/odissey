@@ -1,4 +1,4 @@
-import { Session, World } from '../database/db-types';
+import { Session, World, User } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { DatabaseService } from '../database/database';
 import { Logger } from '../utils';
@@ -41,19 +41,21 @@ export class StoryService {
   /**
    * Initialize new story session with complete story setup
    */
-  async initializeSession(session: Session, world: World, ctx?: ExecutionContext): Promise<void> {
+  async initializeSession(session: Session, world: World, user: User, ctx?: ExecutionContext): Promise<void> {
     Logger.info(`🚀 INITIALIZING SESSION: ${session.id} with world "${world.title}"`);
 
     try {
       // Initialize StoryModel
       const storyModel = await this.storyInitializer.initializeStoryModel({
         session,
-        world
+        world,
+        user
       });
 
       // Generate initial chapters synchronously - user needs the first chapter to start
       const storyOutput = await this.storyPredictor.initializeChapters({
-        storyModel
+        storyModel,
+        user
       });
 
       // Store chapters and set first as current
@@ -69,7 +71,7 @@ export class StoryService {
   /**
    * Process user input and generate story response with continuous feedback
    */
-  async processUserInput(sessionId: string, userInput: string, ctx?: ExecutionContext): Promise<string> {
+  async processUserInput(sessionId: string, userInput: string, user: User, ctx?: ExecutionContext): Promise<string> {
     Logger.info(`💬 PROCESSING INPUT for session ${sessionId}`);
 
     try {
@@ -102,7 +104,8 @@ export class StoryService {
         storyModel,
         currentChapter,
         recentMessages: chapterMessages,
-        userInput
+        userInput,
+        user
       });
 
       const narratorOutput = await this.storyNarrator.generateNarrative({
@@ -110,11 +113,12 @@ export class StoryService {
         currentChapter,
         recentMessages: chapterMessages,
         userInput,
-        optimizerOutput
+        optimizerOutput,
+        user
       });
 
       // Format response immediately
-      const response = `${narratorOutput.response}\n\n**Choose your next action:**\n1. ${narratorOutput.choices[0]}\n2. ${narratorOutput.choices[1]}\n3. ${narratorOutput.choices[2]}`;
+      const response = `${narratorOutput.response}\n\n1. ${narratorOutput.choices[0]}\n2. ${narratorOutput.choices[1]}\n3. ${narratorOutput.choices[2]}`;
 
       // FEEDBACK LOOP:
       // Run updateFutureChapters with the new: user input and narrator response
@@ -126,7 +130,8 @@ export class StoryService {
         futureChapters: chapters.future,
         recentMessages,
         userInput,
-        narratorResponse: narratorOutput.response
+        narratorResponse: narratorOutput.response,
+        user
       });
 
       // Return response immediately for fastest user experience

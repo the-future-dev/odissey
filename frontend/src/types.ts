@@ -42,6 +42,31 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+// === USER TYPES ===
+
+export interface User {
+  id: number;
+  google_id: string;
+  email: string;
+  name: string;
+  picture_url?: string;
+  language: string;
+  created_at: string;
+  updated_at: string;
+  last_login_at: string;
+}
+
+export interface UserWorld {
+  session_id: string;
+  world_id: string;
+  world_title: string;
+  world_description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// === AUTH TYPES ===
+
 // Bottom Tab Navigator types
 export type BottomTabParamList = {
   WorldGeneration: undefined;

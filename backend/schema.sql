@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,              -- User email from Google
   name TEXT NOT NULL,                      -- User display name from Google
   picture_url TEXT,                        -- User profile picture URL
+  language TEXT DEFAULT 'English',         -- User preferred language
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_login_at DATETIME DEFAULT CURRENT_TIMESTAMP

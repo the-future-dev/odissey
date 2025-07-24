@@ -21,6 +21,7 @@ import { GoogleAuthRouter } from './routes/googleAuth';
 import { SessionsRouter } from './routes/sessions';
 import { GenerationRouter } from './routes/generation';
 import { WorldsRouter } from './routes/worlds';
+import { ProfileRouter } from './routes/profile';
 import { HealthRouter } from './routes/health';
 
 export class ApiRouter {
@@ -29,6 +30,7 @@ export class ApiRouter {
   private sessionsRouter: SessionsRouter;
   private generationRouter: GenerationRouter;
   private worldsRouter: WorldsRouter;
+  private profileRouter: ProfileRouter;
   private healthRouter: HealthRouter;
 
   constructor(env: Env) {
@@ -37,6 +39,7 @@ export class ApiRouter {
     this.sessionsRouter = new SessionsRouter(env);
     this.generationRouter = new GenerationRouter(env);
     this.worldsRouter = new WorldsRouter(env);
+    this.profileRouter = new ProfileRouter(env);
     this.healthRouter = new HealthRouter();
   }
 
@@ -51,6 +54,7 @@ export class ApiRouter {
         this.sessionsRouter,
         this.generationRouter,
         this.worldsRouter,
+        this.profileRouter,
         this.healthRouter,
       ];
 

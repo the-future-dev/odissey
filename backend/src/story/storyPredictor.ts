@@ -1,4 +1,4 @@
-import { StoryModel, Chapter, Message } from '../database/db-types';
+import { StoryModel, Chapter, Message, User } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
 import { Logger } from '../utils';
@@ -6,6 +6,7 @@ import { extractJsonFromResponse } from './mpcUtils';
 
 export interface InitializeChaptersInput {
   storyModel: StoryModel;
+  user: User;
 }
 
 export interface UpdateFutureChaptersInput {
@@ -16,6 +17,7 @@ export interface UpdateFutureChaptersInput {
   recentMessages: Message[];
   userInput: string;
   narratorResponse: string;
+  user: User;
 }
 
 export interface StoryPredictorOutput {
@@ -126,7 +128,7 @@ New information:
 
 TASK: Update the current chapter to encompass the new interactions and adjust all future chapters to ensure story coherence. Add or remove chapters as naturally needed for the story progression.`;
 
-    return await this.processStoryRequest(userPrompt, 'update');
+    return await this.processStoryRequest(userPrompt, 'update', input.user);
   }
 
   /**
@@ -147,13 +149,13 @@ Story Configuration:
 
 TASK: Create a complete chapter roadmap for this interactive story. The first chapter will be the current chapter where the user begins their adventure, and the future chapters should provide a comprehensive path to achieve the story's intended impact.`;
 
-    return await this.processStoryRequest(userPrompt, 'initialization');
+    return await this.processStoryRequest(userPrompt, 'initialization', input.user);
   }
 
   /**
    * Unified processing method for both initialization and updates
    */
-  private async processStoryRequest(userPrompt: string, context: 'initialization' | 'update'): Promise<StoryPredictorOutput> {
+  private async processStoryRequest(userPrompt: string, context: 'initialization' | 'update', user: User): Promise<StoryPredictorOutput> {
     const request: TextToTextRequest = {
       messages: [
         { role: 'system', content: this.getSystemPrompt() },

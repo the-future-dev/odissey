@@ -3,12 +3,14 @@ import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
 import { DatabaseService } from '../database/database';
 import { Logger } from '../utils';
+import { User } from '../database/db-types';
 
 export interface OptimizerInput {
   storyModel: StoryModel;
   currentChapter: Chapter;
   recentMessages: Message[];
   userInput: string;
+  user: User;
 }
 
 export interface OptimizerOutput {
@@ -55,7 +57,8 @@ Trigger chapter transition:
 
 Your task is to generate ONE INPUT of what should happen in the single next step of the interactive story based on the pacing.
 
-Return your response as:
+
+IMPORTANT: use explicitly the keywords DECOMPOSITION, TRANSITION and RYTHM; while you can change language for the content. Return your response as the following:
 DECOMPOSITION: [one-line description for the single next narrator/user interaction]
 TRANSITION: [YES or NO]
 RYTHM: [INTRODUCTION or RISING or CLIMAX or RESOLUTION or TRANSITION]`;
