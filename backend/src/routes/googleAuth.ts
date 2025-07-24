@@ -493,9 +493,6 @@ export class GoogleAuthRouter {
     if (existingUser) {
       // Update existing user
       const updatedUser = await this.db.updateUser(existingUser.id, {
-        email: userInfo.email,
-        name: userInfo.name,
-        picture_url: userInfo.picture,
         last_login_at: new Date().toISOString()
       });
       return updatedUser;

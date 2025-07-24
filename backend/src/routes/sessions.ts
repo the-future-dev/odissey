@@ -172,8 +172,7 @@ export class SessionsRouter {
 
       const session = await this.db.createSession(sessionId, user.id, world.id);
 
-      // Initialize the story session with story model and chapters
-      await this.storyService.initializeSession(session, world, ctx);
+      await this.storyService.initializeSession(session, world, user, ctx);
 
       const response: CreateSessionResponse = {
         sessionId: session.id,

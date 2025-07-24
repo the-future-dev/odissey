@@ -1,4 +1,4 @@
-import { StoryModel, Chapter, Message } from '../database/db-types';
+import { StoryModel, Chapter, Message, User } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
 import { Logger } from '../utils';
@@ -10,6 +10,7 @@ export interface NarratorInput {
   recentMessages: Message[];
   userInput: string;
   optimizerOutput: OptimizerOutput;
+  user: User;
 }
 
 export interface NarratorOutput {
@@ -36,22 +37,21 @@ export class StoryNarrator {
 
     const systemPrompt = `You are the story narrator. Your job is to shape the story for the user that is the protagonist in this story!
 
-Your role is to:
-1. Create an immersive response: the user is LIVING the story!
-2. Follow this instruction for the next step of the narration: "${input.optimizerOutput.decomposition}"
-3. End by prompting the user with three choices to engage the user and further develop the story:
-for example you can propose to expand the instruction: "${input.optimizerOutput.decomposition}" or propose interesting evolvements or actions that would be natural to take in this environment.
+Your role is to generate the next interaction in the story, following this instruction for the next step of the narration: "${input.optimizerOutput.decomposition}".
+End by prompting the user with three choices to engage the user and further develop the story.
 
 Narrator Style:
-- Write in a way that draws the user deeper into the story
 - Use the present tense
-- Use simple worlds, a friendly tone and a simple phrase format
+- Use simple worlds, a friendly tone and a simple phrase format, but draw the user attention!
 - **NEVER** repeat the user choice
 - **NEVER** speak for the user inside your narration. ANY time the user is involved in a dialogue, make him DIRECTLY speak in it - prompt options of phrases to say!
 - Use around 100-175 words
 
+
+IMPORTANT: ANSWER IN ${input.user.language}!
+
 FORMAT - at the end of the message use this exact format:
-**Choose your next action:**
+
 1. [choice 1]
 2. [choice 2]
 3. [choice 3]
@@ -112,38 +112,54 @@ FORMAT - at the end of the message use this exact format:
    * Parse narrative response using the actual AI model format
    */
   private parseNarrativeResponse(content: string): NarratorOutput {
-    // The AI model consistently outputs this format:
-    // [narrative text]
-    // **Choose your next action:**
-    // 1. [choice 1]
-    // 2. [choice 2]
-    // 3. [choice 3]
+    // Find all lines that match the pattern "1.", "2.", "3."
+    const lines = content.split('\n');
+    const choicePattern = /^\s*(\d+)\.\s*(.+)$/;
     
-    // Split on the choice header
-    const parts = content.split(/\*\*Choose your next action:\*\*/i);
+    // Find the last occurrence of choices 1, 2, 3
+    let lastChoice1Index = -1;
+    let lastChoice2Index = -1;
+    let lastChoice3Index = -1;
     
-    if (parts.length !== 2) {
-      Logger.error(`❌ Failed to parse narrative - expected format not found. Content: ${content}`);
-      throw new Error('Could not extract narrative and choices from response');
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(choicePattern);
+      if (match) {
+        const choiceNumber = parseInt(match[1]);
+        if (choiceNumber === 1) lastChoice1Index = i;
+        else if (choiceNumber === 2) lastChoice2Index = i;
+        else if (choiceNumber === 3) lastChoice3Index = i;
+      }
     }
     
-    // Extract narrative (everything before the choice header)
-    const narrative = parts[0].trim();
+    // Validate that we found all three choices and they appear consecutively
+    if (lastChoice1Index === -1 || lastChoice2Index === -1 || lastChoice3Index === -1) {
+      Logger.error(`❌ Failed to parse choices - not all choices found. Content: ${content}`);
+      throw new Error('Could not find all three choices (1., 2., 3.) in response');
+    }
     
-    // Extract choices (everything after the choice header)
-    const choicesText = parts[1].trim();
+    // Check if choices appear in order and consecutively
+    if (lastChoice2Index !== lastChoice1Index + 1 || lastChoice3Index !== lastChoice2Index + 1) {
+      Logger.error(`❌ Failed to parse choices - choices not consecutive. Content: ${content}`);
+      throw new Error('Choices must appear consecutively in order 1., 2., 3.');
+    }
     
-    // Parse numbered choices (1., 2., 3.)
-    const choiceLines = choicesText.split('\n')
-      .map(line => line.trim())
-      .filter(line => line.match(/^\d+\./))
-      .map(line => line.replace(/^\d+\.\s*/, '').trim())
-      .filter(choice => choice.length > 0);
+    // Extract the choices
+    const choices: string[] = [];
+    for (let i = lastChoice1Index; i <= lastChoice3Index; i++) {
+      const match = lines[i].match(choicePattern);
+      if (match) {
+        choices.push(match[2].trim());
+      }
+    }
     
-    if (choiceLines.length !== 3) {
-      Logger.error(`❌ Failed to parse choices - expected 3 choices, got ${choiceLines.length}. Content: ${content}`);
+    if (choices.length !== 3) {
+      Logger.error(`❌ Failed to parse choices - expected 3 choices, got ${choices.length}. Content: ${content}`);
       throw new Error('Could not extract exactly 3 choices from response');
     }
+    
+    // Extract narrative (everything before the last choice block)
+    const narrativeLines = lines.slice(0, lastChoice1Index);
+    const narrative = narrativeLines.join('\n').trim();
     
     if (!narrative) {
       Logger.error(`❌ Failed to parse narrative - narrative is empty. Content: ${content}`);
@@ -151,8 +167,8 @@ FORMAT - at the end of the message use this exact format:
     }
     
     Logger.info(`✅ Narrative parsed successfully`);
-    return { response: narrative, choices: choiceLines };
+    return { response: narrative, choices };
   }
 
 
-} 
+}

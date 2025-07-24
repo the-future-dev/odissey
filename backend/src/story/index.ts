@@ -21,10 +21,4 @@ export type {
 export type { 
   NarratorInput as StoryNarratorInput,
   NarratorOutput as StoryNarratorOutput
-} from './storyNarrator';
-export type { 
-  PredictorInput as StoryPredictorInput,
-  PredictorOutput as StoryPredictorOutput,
-  FeedbackInput as StoryFeedbackInput,
-  FeedbackOutput as StoryFeedbackOutput
-} from './storyPredictor'; 
+} from './storyNarrator'; 

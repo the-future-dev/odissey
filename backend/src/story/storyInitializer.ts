@@ -8,6 +8,7 @@ import { extractJsonFromResponse } from './mpcUtils';
 export interface StoryInitializerInput {
   session: Session;
   world: World;
+  user: User;
 }
 
 /**
@@ -31,6 +32,7 @@ export class StoryInitializer {
 
     const systemPrompt = `You are a narrator.
 Your job is to create the foundation for an interactive story where the user is the main character.
+The user's name is ${input.user.name}. Use it only when it naturally fits.
 
 Your task:
 - Establish the story framework that will guide the entire adventure

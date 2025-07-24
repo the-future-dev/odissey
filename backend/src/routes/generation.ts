@@ -243,7 +243,7 @@ export class GenerationRouter {
 
       // Generate AI response (handles message saving internally)
       // Pass ExecutionContext to enable background operations
-      const narratorResponse = await this.storyService.processUserInput(sessionId, userMessage, ctx);
+      const narratorResponse = await this.storyService.processUserInput(sessionId, userMessage, user, ctx);
 
       Logger.info('Story interaction completed successfully', {
         ...context,

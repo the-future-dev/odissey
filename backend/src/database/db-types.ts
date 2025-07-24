@@ -16,6 +16,7 @@ export interface User {
   email: string;
   name: string;
   picture_url?: string;
+  language: string;
   created_at: string;
   updated_at: string;
   last_login_at: string;
