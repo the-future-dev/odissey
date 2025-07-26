@@ -4,7 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { PanGestureHandler, State } from 'react-native-gesture-handler';
 import { RootStackParamList } from '../types';
-import { useSession } from '../contexts/SessionContext';
+import { useSessionManager } from '../hooks/useSessionManager';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Session'>;
 
@@ -18,7 +18,7 @@ export const SessionScreen: React.FC<Props> = ({ route, navigation }) => {
     startSession,
     resetSession,
     sendMessage 
-  } = useSession();
+  } = useSessionManager();
 
   const [inputText, setInputText] = useState('');
   const dotsOpacity = useRef(new Animated.Value(0.3)).current;

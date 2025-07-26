@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 import { SessionData, Message } from '../types';
-import { GoogleTokenManager, createSession } from '../api';
-import { API_URL } from '../config';
+import { createSession } from '../api';
+import { API_URL, authenticatedFetch, handleResponse } from '../api/api';
 import { SessionManager } from '../utils/storage';
 
-interface SessionContextType {
+interface UseSessionManagerReturn {
   currentSession: SessionData | null;
   messages: Message[];
   isSessionLoading: boolean;
@@ -19,8 +19,6 @@ interface SessionContextType {
   hasSessionForWorld: (worldId: string) => Promise<boolean>;
   getAllActiveSessions: () => Promise<Array<{worldId: string, sessionId: string, lastActive: Date}>>;
 }
-
-const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 // Helper function to parse narrator response and split into narrative text and choices
 const parseNarratorResponse = (response: string, timestamp: Date): Message[] => {
@@ -70,7 +68,7 @@ const parseNarratorResponse = (response: string, timestamp: Date): Message[] => 
   return messages;
 };
 
-export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const useSessionManager = (): UseSessionManagerReturn => {
   const [currentSession, setCurrentSession] = useState<SessionData | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSessionLoading, setIsSessionLoading] = useState(false);
@@ -108,12 +106,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIsSessionLoading(true);
     
     try {
-      // Check authentication first
-      const authResult = await GoogleTokenManager.checkExistingAuth();
-      if (!authResult.isAuthenticated) {
-        throw new Error('User not authenticated. Please sign in again.');
-      }
-
       // Load existing session first
       const existingSession = await SessionManager.getSessionByWorld(worldId);
       
@@ -125,13 +117,8 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
 
       // No existing session, create a new one
-      const token = await GoogleTokenManager.getValidToken();
-      
-      if (!token) {
-        throw new Error('No valid authentication token. Please sign in again.');
-      }
-      
-      const session = await createSession(token, worldId);
+      // Authentication is handled by authenticatedFetch in the API layer
+      const session = await createSession(worldId);
       
       setCurrentSession(session);
       
@@ -148,7 +135,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       
       // Automatically send "Let's start!" message after session creation
       setIsSessionLoading(false); // Stop loading before auto-sending
-      await autoSendStartMessage(session, token, [welcomeMessage]);
+      await autoSendStartMessage(session, [welcomeMessage]);
       
     } catch (error) {
       console.error('Failed to start session:', error);
@@ -223,7 +210,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     return await SessionManager.getAllActiveSessions();
   };
 
-  const autoSendStartMessage = async (session: SessionData, token: string, currentMessages: Message[]) => {
+  const autoSendStartMessage = async (session: SessionData, currentMessages: Message[]) => {
     setIsInteracting(true);
     
     try {
@@ -237,26 +224,25 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const updatedMessages = [...currentMessages, startMessage];
       setMessages(updatedMessages);
       
-      // Send message and get response
-      const response = await fetch(`${API_URL}/sessions/${session.sessionId}/interact`, {
+      // Send message and get response using authenticatedFetch
+      const response = await authenticatedFetch(`${API_URL}/sessions/${session.sessionId}/interact`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ message: "Let's start!" }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await handleResponse<{ response: string }>(response);
+      console.log('Auto-start API Response:', data); // Debug log
       
       // Parse the narrator response into narrative and choice messages
+      console.log('Auto-start parsing response:', data.response); // Debug log
       const parsedMessages = parseNarratorResponse(data.response, new Date());
+      console.log('Auto-start parsed messages:', parsedMessages); // Debug log
       
       const finalMessages = [...updatedMessages, ...parsedMessages];
+      console.log('Auto-start final messages to set:', finalMessages); // Debug log
       setMessages(finalMessages);
       
       // Save the session with the new messages
@@ -276,18 +262,6 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIsInteracting(true);
     
     try {
-      // Check authentication first
-      const authResult = await GoogleTokenManager.checkExistingAuth();
-      if (!authResult.isAuthenticated) {
-        throw new Error('User not authenticated. Please sign in again.');
-      }
-
-      const token = await GoogleTokenManager.getValidToken();
-      
-      if (!token) {
-        throw new Error('No valid authentication token. Please sign in again.');
-      }
-      
       // Add user message immediately
       const userMessage: Message = {
         type: 'user',
@@ -298,26 +272,25 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
       const updatedMessages = [...messages, userMessage];
       setMessages(updatedMessages);
       
-      // Send message and get response
-      const response = await fetch(`${API_URL}/sessions/${currentSession.sessionId}/interact`, {
+      // Send message and get response using authenticatedFetch
+      const response = await authenticatedFetch(`${API_URL}/sessions/${currentSession.sessionId}/interact`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ message }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Request failed: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await handleResponse<{ response: string }>(response);
+      console.log('API Response:', data); // Debug log
       
       // Parse the narrator response into narrative and choice messages
+      console.log('Parsing response:', data.response); // Debug log
       const parsedMessages = parseNarratorResponse(data.response, new Date());
+      console.log('Parsed messages:', parsedMessages); // Debug log
       
       const finalMessages = [...updatedMessages, ...parsedMessages];
+      console.log('Final messages to set:', finalMessages); // Debug log
       setMessages(finalMessages);
       
       // Save the session with the new messages
@@ -330,7 +303,7 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   };
 
-  const value: SessionContextType = {
+  return {
     currentSession,
     messages,
     isSessionLoading,
@@ -343,18 +316,4 @@ export const SessionProvider: React.FC<{ children: ReactNode }> = ({ children })
     hasSessionForWorld,
     getAllActiveSessions,
   };
-
-  return (
-    <SessionContext.Provider value={value}>
-      {children}
-    </SessionContext.Provider>
-  );
 };
-
-export const useSession = () => {
-  const context = useContext(SessionContext);
-  if (context === undefined) {
-    throw new Error('useSession must be used within a SessionProvider');
-  }
-  return context;
-}; 

@@ -1,6 +1,5 @@
-import { API_URL } from '../config';
+import { API_URL, authenticatedFetch, handleResponse } from './api';
 import { World } from '../types';
-import { handleResponse } from './api';
 
 // ------------------------------------------------------------
 // WORLD MANAGEMENT
@@ -8,33 +7,26 @@ import { handleResponse } from './api';
 
 // Get all available worlds
 export const getAllWorlds = async (token: string): Promise<World[]> => {
-  const response = await fetch(`${API_URL}/worlds`, {
+  const response = await authenticatedFetch(`${API_URL}/worlds`, {
     method: 'GET',
-    headers: { 
-      'Authorization': `Bearer ${token}`
-    }
   });
   return handleResponse(response);
 };
 
 // Get a specific world by ID
 export const getWorldById = async (token: string, worldId: string): Promise<World> => {
-  const response = await fetch(`${API_URL}/worlds/${worldId}`, {
+  const response = await authenticatedFetch(`${API_URL}/worlds/${worldId}`, {
     method: 'GET',
-    headers: { 
-      'Authorization': `Bearer ${token}`
-    }
   });
   return handleResponse(response);
 };
 
 // Create a new world
 export const createWorld = async (token: string, title: string, description?: string): Promise<World> => {
-  const response = await fetch(`${API_URL}/worlds`, {
+  const response = await authenticatedFetch(`${API_URL}/worlds`, {
     method: 'POST',
     headers: { 
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ title, description })
   });
