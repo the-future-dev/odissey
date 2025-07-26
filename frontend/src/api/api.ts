@@ -14,6 +14,23 @@ export class ApiError extends Error {
 }
 
 /**
+ * Type for the auth error handler callback
+ */
+type AuthErrorHandler = (error: any) => Promise<void>;
+
+/**
+ * Global auth error handler - will be set by AuthContext
+ */
+let globalAuthErrorHandler: AuthErrorHandler | null = null;
+
+/**
+ * Set the global auth error handler
+ */
+export const setGlobalAuthErrorHandler = (handler: AuthErrorHandler) => {
+  globalAuthErrorHandler = handler;
+};
+
+/**
  * Standardized response handler for all API calls
  */
 export const handleResponse = async <T>(response: Response): Promise<T> => {
@@ -26,8 +43,15 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
       errorMessage = `HTTP ${response.status}: ${response.statusText}`;
     }
     
+    const apiError = new ApiError(errorMessage, response.status);
+    
+    // Handle 401 errors globally
+    if (response.status === 401 && globalAuthErrorHandler) {
+      await globalAuthErrorHandler(apiError);
+    }
+    
     console.error(`API Error [${response.status}]:`, errorMessage);
-    throw new ApiError(errorMessage, response.status);
+    throw apiError;
   }
   
   try {
@@ -39,7 +63,7 @@ export const handleResponse = async <T>(response: Response): Promise<T> => {
 };
 
 /**
- * Enhanced API client with automatic token refresh
+ * Enhanced API client with automatic token refresh and global 401 handling
  */
 export class ApiClient {
   private static instance: ApiClient;
@@ -60,15 +84,23 @@ export class ApiClient {
   }
 
   /**
-   * Make an authenticated API request with automatic token refresh
+   * Make an authenticated API request with automatic token refresh and global 401 handling
    */
   async request<T = any>(config: RequestConfig): Promise<T> {
     try {
       return await this.makeRequest<T>(config);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        // Token might be expired, try to refresh
-        return await this.handleTokenRefresh<T>(config);
+        // First try to refresh the token
+        try {
+          return await this.handleTokenRefresh<T>(config);
+        } catch (refreshError) {
+          // If refresh fails, use global auth error handler
+          if (globalAuthErrorHandler) {
+            await globalAuthErrorHandler(refreshError);
+          }
+          throw refreshError;
+        }
       }
       throw error;
     }
@@ -100,8 +132,9 @@ export class ApiClient {
       } else {
         // Refresh failed, clear auth and reject all queued requests
         await GoogleTokenManager.clearAuth();
-        this.processQueue(new ApiError('Authentication expired. Please login again.', 401));
-        throw new ApiError('Authentication expired. Please login again.', 401);
+        const authError = new ApiError('Authentication expired. Please login again.', 401);
+        this.processQueue(authError);
+        throw authError;
       }
     } catch (error) {
       // Refresh failed, clear auth and reject all queued requests
@@ -182,6 +215,10 @@ export class ApiClient {
   async delete<T = any>(url: string, config?: Partial<RequestConfig>): Promise<T> {
     return this.request<T>({ url, method: 'DELETE', ...config });
   }
+
+  async patch<T = any>(url: string, body?: any, config?: Partial<RequestConfig>): Promise<T> {
+    return this.request<T>({ url, method: 'PATCH', body, ...config });
+  }
 }
 
 export interface RequestConfig {
@@ -194,3 +231,33 @@ export interface RequestConfig {
 
 // Export singleton instance for convenience
 export const apiClient = ApiClient.getInstance();
+
+/**
+ * Enhanced fetch wrapper that adds authentication headers
+ * Use this for any direct fetch calls that aren't using ApiClient
+ * Error handling (including 401s) is done by handleResponse()
+ */
+export const authenticatedFetch = async (url: string, config: RequestInit = {}): Promise<Response> => {
+  // Add authentication header if not already present
+  if (!config.headers) {
+    config.headers = {};
+  }
+  
+  const headers = config.headers as Record<string, string>;
+  
+  // Add auth header if not present and not explicitly disabled
+  if (!headers['Authorization'] && !headers['X-No-Auth']) {
+    const token = await GoogleTokenManager.getStoredToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  
+  // Ensure content-type is set for POST/PUT/PATCH requests
+  if (['POST', 'PUT', 'PATCH'].includes(config.method?.toUpperCase() || '') && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  
+  // Make the request - let handleResponse() handle all errors including 401s
+  return await fetch(url, config);
+};

@@ -1,42 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, Image, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types';
-import { API_URL } from '../config';
-import { GoogleTokenManager } from '../api/googleAuth';
 import { CrossPlatformOAuthService } from '../services/CrossPlatformOAuthService';
 import { ErrorHandlingService, ErrorDisplayInfo } from '../services/ErrorHandlingService';
+import { useAuth } from '../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GoogleAuth'>;
 
 export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [errorInfo, setErrorInfo] = useState<ErrorDisplayInfo | null>(null);
   const [retryAttempts, setRetryAttempts] = useState(0);
+  
+  const { user, isAuthenticated, isAuthLoading, checkAuth } = useAuth();
   const oauthService = CrossPlatformOAuthService.getInstance();
   const errorHandler = ErrorHandlingService.getInstance();
 
   useEffect(() => {
-    checkExistingAuth();
-  }, []);
-
-  const checkExistingAuth = async () => {
-    try {
-      const existingAuth = await oauthService.checkExistingAuth();
-      if (existingAuth.isAuthenticated && existingAuth.user) {
-        setUser(existingAuth.user);
-        // Navigate to world selection if already authenticated
-        navigation.replace('MainTabs');
-      }
-    } catch (error) {
-      // Failed to check existing auth, proceed with normal flow
-    } finally {
-      setIsCheckingAuth(false);
+    // If already authenticated, navigate to main app
+    if (isAuthenticated && user) {
+      navigation.replace('MainTabs');
     }
-  };
+  }, [isAuthenticated, user, navigation]);
 
   const handleGoogleSignIn = async () => {
     // Prevent multiple simultaneous attempts
@@ -51,10 +39,12 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
       const result = await oauthService.authenticate();
       
       if (result.success) {
-        setUser(result.user);
         setErrorInfo(null);
         setRetryAttempts(0);
-        handleAuthSuccess(result.user);
+        
+        // Refresh auth state and navigate
+        await checkAuth();
+        navigation.replace('MainTabs');
       } else if (result.cancelled) {
         setAuthError('Authentication was cancelled. Please try again.');
         setErrorInfo(null);
@@ -75,18 +65,10 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  const handleAuthSuccess = async (user?: any) => {
-    setIsAuthenticating(false);
-    if (user) setUser(user);
-    
-    navigation.replace('MainTabs');
-  };
-
   const handleTryAgain = async () => {
     setAuthError(null);
     setErrorInfo(null);
     setIsAuthenticating(false);
-    setIsCheckingAuth(false);
     
     // Clear any existing auth state if this is a retry after multiple attempts
     if (retryAttempts > 2) {
@@ -107,12 +89,12 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // Loading state while checking existing auth
-  if (isCheckingAuth) {
+  // Show loading while checking existing auth
+  if (isAuthLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
         <ActivityIndicator size="large" color="#8B5CF6" />
-        <Text style={styles.statusText}>Checking authentication...</Text>
+        <Text style={styles.loadingText}>Checking authentication...</Text>
       </View>
     );
   }
@@ -408,7 +390,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  statusText: {
+  loadingText: {
     fontSize: 16,
     color: '#94A3B8',
     marginTop: 16,
