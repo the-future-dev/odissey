@@ -8,7 +8,7 @@ import { SessionData, GetChaptersResponse } from '../types';
 /**
  * Creates a new game session for a specific world
  */
-export const createSession = async (token: string, worldId: string): Promise<SessionData> => {
+export const createSession = async (worldId: string): Promise<SessionData> => {
   const response = await authenticatedFetch(`${API_URL}/sessions/new`, {
     method: 'POST',
     headers: { 
