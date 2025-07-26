@@ -6,7 +6,6 @@ import { Logger } from '../utils';
 import { StoryInitializer } from './storyInitializer';
 import { ChapterManager } from './chapterManager';
 import { StoryPredictor } from './storyPredictor';
-import { StoryOptimizer } from './storyOptimizer';
 import { StoryNarrator } from './storyNarrator';
 
 /**
@@ -21,7 +20,6 @@ export class StoryService {
   private storyInitializer: StoryInitializer;
   private chapterManager: ChapterManager;
   private storyPredictor: StoryPredictor;
-  private storyOptimizer: StoryOptimizer;
   private storyNarrator: StoryNarrator;
 
   constructor(db: DatabaseService, aiService: AIServiceManager) {
@@ -32,14 +30,17 @@ export class StoryService {
     this.storyInitializer = new StoryInitializer(aiService, db);
     this.chapterManager = new ChapterManager(db);
     this.storyPredictor = new StoryPredictor(aiService);
-    this.storyOptimizer = new StoryOptimizer(aiService, db);
-    this.storyNarrator = new StoryNarrator(aiService);
+    this.storyNarrator = new StoryNarrator(aiService, db);
     
     Logger.info('🎮 StoryService initialized with flattened logic');
   }
 
   /**
-   * Initialize new story session with complete story setup
+   * FIRST ENDPOINT: STORY INTITIALIZATION
+   * Initialize new story session:
+   * 1. generate new Story Model in the aristotelian way (see StoryModel)
+   * 2. generate the new chapters
+   * 3. execute DB operations
    */
   async initializeSession(session: Session, world: World, user: User, ctx?: ExecutionContext): Promise<void> {
     Logger.info(`🚀 INITIALIZING SESSION: ${session.id} with world "${world.title}"`);
@@ -69,13 +70,17 @@ export class StoryService {
   }
 
   /**
-   * Process user input and generate story response with continuous feedback
+   * SECOND ENDPOINT: STORY INTERACTION
+   * 1. get the user choice
+   * 2. generate story narration with simple, good interactions
+   * 3. return story narration to the user
+   * 4. in the background: feedback -> update current and future chapters
    */
   async processUserInput(sessionId: string, userInput: string, user: User, ctx?: ExecutionContext): Promise<string> {
     Logger.info(`💬 PROCESSING INPUT for session ${sessionId}`);
 
     try {
-      // Get required data in parallel
+      // retrieve data of the current story session from the database
       const [storyModel, currentChapter] = await Promise.all([
         this.db.getStoryModelBySessionId(sessionId),
         this.chapterManager.getCurrentChapter(sessionId)
@@ -95,25 +100,16 @@ export class StoryService {
       // Get all messages from the current chapter and recent messages for feedback
       const [chapterMessages, recentMessages] = await Promise.all([
         this.db.getChapterMessages(sessionId, currentChapterNumber),
-        this.db.getRecentSessionMessages(sessionId, 10)
+        this.db.getRecentSessionMessages(sessionId, 5)
       ]);
 
       const userMessagePromise = this.db.createMessage(sessionId, 'user', userInput, currentChapterNumber);
-
-      const optimizerOutput = await this.storyOptimizer.optimizeStory({
-        storyModel,
-        currentChapter,
-        recentMessages: chapterMessages,
-        userInput,
-        user
-      });
 
       const narratorOutput = await this.storyNarrator.generateNarrative({
         storyModel,
         currentChapter,
         recentMessages: chapterMessages,
         userInput,
-        optimizerOutput,
         user
       });
 
@@ -138,11 +134,11 @@ export class StoryService {
       // Handle background operations asynchronously with ExecutionContext
       if (ctx) {
         Logger.info(`🔄 Scheduling background operations with ExecutionContext for session ${sessionId}`);
-        ctx.waitUntil(this.handleBackgroundOperations(sessionId, response, currentChapterNumber, optimizerOutput.shouldTransition, userMessagePromise, storyOutput));
+        ctx.waitUntil(this.handleBackgroundOperations(sessionId, response, currentChapterNumber, narratorOutput.shouldTransition, userMessagePromise, storyOutput));
       } else {
         Logger.warn(`⚠️  No ExecutionContext provided - background operations may be interrupted for session ${sessionId}`);
         // Fallback to fire-and-forget (not recommended for production)
-        this.handleBackgroundOperations(sessionId, response, currentChapterNumber, optimizerOutput.shouldTransition, userMessagePromise, storyOutput);
+        this.handleBackgroundOperations(sessionId, response, currentChapterNumber, narratorOutput.shouldTransition, userMessagePromise, storyOutput);
       }
 
       Logger.info(`✅ Generated response for session ${sessionId} with feedback loop`);
@@ -213,17 +209,6 @@ export class StoryService {
           );
           createdFutureChapters.push(chapter);
         }
-
-        // console.log('\n📖 CHAPTERS INITIALIZED:');
-        // console.log('='.repeat(60));
-        // console.log(`📚 CURRENT Chapter 1: ${firstChapter.title}`);
-        // console.log(`  └─ ${firstChapter.description}`);
-        // console.log('\n📚 FUTURE CHAPTERS:');
-        // createdFutureChapters.forEach(chapter => {
-        //   console.log(`Chapter ${chapter.chapter_number}: ${chapter.title}`);
-        //   console.log(`  └─ ${chapter.description}`);
-        // });
-        // console.log('='.repeat(60));
 
         Logger.info(`✅ Initialized ${createdFutureChapters.length} future chapters`);
       }

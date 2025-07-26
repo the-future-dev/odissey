@@ -128,17 +128,4 @@ export class ChapterManager {
       throw new Error('Failed to store future chapters');
     }
   }
-
-  /**
-   * Update chapter decomposition (what the Optimizer generates)
-   */
-  async updateChapterDecomposition(chapterId: number, decomposition: string): Promise<void> {
-    try {
-      await this.db.updateChapterDecomposition(chapterId, decomposition);
-      Logger.info(`📝 Updated chapter decomposition: "${decomposition}"`);
-    } catch (error) {
-      Logger.error(`❌ Failed to update chapter decomposition: ${error instanceof Error ? error.message : String(error)}`);
-      throw new Error('Failed to update chapter decomposition');
-    }
-  }
 } 

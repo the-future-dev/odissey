@@ -1,13 +1,4 @@
--- User authentication and session management (POST-MIGRATION SCHEMA)
-
--- Anonymous sessions table (renamed from original users table)
--- CREATE TABLE IF NOT EXISTS sessions_anonymous (
---   id INTEGER PRIMARY KEY AUTOINCREMENT,
---   token TEXT UNIQUE NOT NULL,
---   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
---   expires_at DATETIME NOT NULL,
---   last_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
--- );
+-- SCHEMA.SQL
 
 -- Google-authenticated users table
 CREATE TABLE IF NOT EXISTS users (
@@ -32,13 +23,6 @@ CREATE TABLE IF NOT EXISTS google_oauth_sessions (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Migration tracking table
-CREATE TABLE IF NOT EXISTS migrations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  migration_name TEXT UNIQUE NOT NULL,
-  executed_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- World definitions
