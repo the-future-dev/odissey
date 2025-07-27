@@ -94,22 +94,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error('Failed to clear auth state:', clearError);
     }
 
-    // Show user-friendly error message and navigate to auth
-    Alert.alert(
-      'Session Expired',
-      'Your session has expired. Please sign in again to continue.',
-      [
-        {
-          text: 'Sign In',
-          onPress: () => {
-            if (onAuthRequired) {
-              onAuthRequired();
-            }
-          }
-        }
-      ],
-      { cancelable: false }
-    );
+    // Automatically navigate to auth screen
+    if (onAuthRequired) {
+      onAuthRequired();
+    }
 
     // Log the error
     errorHandler.logError(error, 'auth_error');

@@ -15,7 +15,7 @@ import { setGlobalAuthErrorHandler } from '../api/api';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppStack: React.FC = () => {
-  const { handleAuthError, setOnAuthRequired } = useAuth();
+  const { handleAuthError, setOnAuthRequired, isAuthenticated, isAuthLoading } = useAuth();
   const navigation = useNavigation<any>();
 
   const handleNavToAuth = useCallback(() => {
@@ -29,6 +29,16 @@ const AppStack: React.FC = () => {
     // Set up navigation callback for auth errors
     setOnAuthRequired(handleNavToAuth);
   }, [handleAuthError, setOnAuthRequired, handleNavToAuth]);
+
+  useEffect(() => {
+    if (!isAuthLoading) {
+      if (isAuthenticated) {
+        navigation.navigate('MainTabs');
+      } else {
+        navigation.navigate('GoogleAuth');
+      }
+    }
+  }, [isAuthLoading, isAuthenticated, navigation]);
 
   return (
     <Stack.Navigator 
