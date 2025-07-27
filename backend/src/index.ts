@@ -15,7 +15,8 @@
  */
 
 import { ApiRouter } from './routes';
-import { Logger, createTimer, getElapsed } from './utils';
+import { Logger } from './utils/logger';
+
 import { Env } from './routes';
 
 // Global router cache to avoid recreating for every request
@@ -60,7 +61,7 @@ function getCachedRouter(env: Env): ApiRouter {
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		const requestTimer = createTimer();
+		const requestTimer = Date.now();
 		const requestId = crypto.randomUUID().substring(0, 8);
 		
 		// Initialize logger if not already done
@@ -97,7 +98,7 @@ export default {
 			const response = await router.route(request, ctx);
 			
 			// Log response
-			const duration = getElapsed(requestTimer);
+			const duration = Date.now() - requestTimer;
 			Logger.logRequest(request, response, {
 				component: 'WORKER',
 				operation: 'RESPONSE_SENT',
@@ -134,7 +135,7 @@ export default {
 			});
 			
 		} catch (error) {
-			const duration = getElapsed(requestTimer);
+			const duration = Date.now() - requestTimer;
 			
 			Logger.error('Worker error', error, {
 				component: 'WORKER',

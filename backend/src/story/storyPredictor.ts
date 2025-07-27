@@ -1,7 +1,7 @@
 import { StoryModel, Chapter, Message, User } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 import { extractJsonFromResponse } from './mpcUtils';
 
 export interface InitializeChaptersInput {

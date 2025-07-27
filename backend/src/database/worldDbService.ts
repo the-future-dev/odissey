@@ -1,5 +1,5 @@
 import { World } from './db-types';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 // type D1Database should be provided by your environment (e.g., Cloudflare D1)
 
 export class WorldDbService {

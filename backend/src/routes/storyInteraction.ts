@@ -1,25 +1,16 @@
-import {
-    createJsonResponse,
-    createErrorResponse,
-    extractBearerToken,
-    parseJsonBody,
-    validateRequiredFields,
-    generateSessionId,
-    isValidWorldId,
-    isValidSessionId,
-    logRequest,
-    Logger,
-    sanitizeInput,
-    createTimer,
-    getElapsed,
-    corsHeaders
-} from '../utils';
-import { CreateSessionResponse, GetChaptersResponse, InteractWithStoryRequest } from './api-types';
+import { createJsonResponse, createErrorResponse, parseJsonBody, corsHeaders } from '../utils/response';
+import { validateRequiredFields, generateSessionId, isValidWorldId, isValidSessionId } from '../utils/validation';
+import { logRequest } from '../utils/requestLogger';
+import { Logger } from '../utils/logger';
+import { sanitizeInput } from '../utils/sanitization';
+
+import { InteractWithStoryRequest } from './api-types';
 import { Env } from '../routes';
 import { StoryService } from '../story/storyService';
 import { AIServiceManager, GeminiProvider, HuggingFaceProvider } from '../ai';
 import { OAuthService, UserDbService, WorldDbService, SessionDbService, StoryModelDbService, ChapterDbService, MessageDbService } from '../database';
 import { Chapter } from '../database/db-types';
+import { AuthService } from '../utils/authService';
 
 export class StoryInteractionRouter {
     private oAuth: OAuthService;
@@ -31,9 +22,10 @@ export class StoryInteractionRouter {
     private messageDB: MessageDbService;
     private aiService: AIServiceManager;
     private storyService: StoryService;
+    private authService: AuthService;
 
     constructor(env: Env) {
-        const timer = createTimer();
+        const timer = Date.now();
         const context = {
             component: 'StoryInteractionRouter',
             operation: 'INIT'
@@ -61,12 +53,13 @@ export class StoryInteractionRouter {
         }
 
         this.storyService = new StoryService(this.aiService);
+        this.authService = new AuthService(this.oAuth, this.userDB);
 
-        Logger.info('StoryInteractionRouter initialized successfully', { ...context, duration: getElapsed(timer) });
+        Logger.info('StoryInteractionRouter initialized successfully', { ...context, duration: Date.now() - timer });
     }
 
     async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
-        const timer = createTimer();
+        const timer = Date.now();
         const url = new URL(request.url);
         const method = request.method;
         const pathname = url.pathname;
@@ -81,52 +74,28 @@ export class StoryInteractionRouter {
         logRequest(request);
 
         if (pathname === '/sessions/new' && method === 'POST') {
-            Logger.info('Routing to create session', { ...context, operation: 'ROUTE_TO_CREATE_SESSION', duration: getElapsed(timer) });
+            Logger.info('Routing to create session', { ...context, operation: 'ROUTE_TO_CREATE_SESSION', duration: Date.now() - timer });
             return this.createSession(request, ctx);
         }
 
         const chaptersMatch = pathname.match(/^\/sessions\/([^\/]+)\/chapters$/);
         if (chaptersMatch && method === 'GET') {
             const sessionId = chaptersMatch[1];
-            Logger.info('Routing to get chapters', { ...context, sessionId, operation: 'ROUTE_TO_GET_CHAPTERS', duration: getElapsed(timer) });
+            Logger.info('Routing to get chapters', { ...context, sessionId, operation: 'ROUTE_TO_GET_CHAPTERS', duration: Date.now() - timer });
             return this.getChapters(request, sessionId);
         }
 
         const sessionInteractMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact$/);
         if (sessionInteractMatch && method === 'POST') {
             const sessionId = sessionInteractMatch[1];
-            Logger.info('Routing to story interaction', { ...context, sessionId, operation: 'ROUTE_TO_INTERACT', duration: getElapsed(timer) });
+            Logger.info('Routing to story interaction', { ...context, sessionId, operation: 'ROUTE_TO_INTERACT', duration: Date.now() - timer });
             return await this.interactWithStory(request, sessionId, ctx);
         }
 
-        Logger.debug('Route not handled by StoryInteractionRouter', { ...context, duration: getElapsed(timer) });
+        Logger.debug('Route not handled by StoryInteractionRouter', { ...context, duration: Date.now() - timer });
         return null;
     }
 
-    private async authenticateAndAuthorize(request: Request, context: any): Promise<{ user: any, oauthSession: any } | Response> {
-        const authHeader = request.headers.get('Authorization');
-        const token = extractBearerToken(authHeader);
-        if (!token) {
-            Logger.warn('Missing authorization header', context);
-            return createErrorResponse('Missing authorization header', 401, 'Unauthorized');
-        }
-
-        const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
-        if (!oauthSession || new Date(oauthSession.expires_at) <= new Date()) {
-            if (oauthSession) {
-                await this.oAuth.deleteOAuthSession(oauthSession.id);
-            }
-            Logger.warn('Invalid or expired token', context);
-            return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
-        }
-
-        const user = await this.userDB.getUserById(oauthSession.user_id);
-        if (!user) {
-            Logger.error('User not found for authenticated session', context);
-            return createErrorResponse('User not found', 401, 'Unauthorized');
-        }
-        return { user, oauthSession };
-    }
 
     private async getChaptersStructured(sessionId: string): Promise<{ history: Chapter[], current: Chapter | null, future: Chapter[] }> {
         const [history, current, future] = await Promise.all([
@@ -151,7 +120,7 @@ export class StoryInteractionRouter {
                 return createErrorResponse('Invalid session ID format', 400);
             }
 
-            const authResult = await this.authenticateAndAuthorize(request, context);
+            const authResult = await this.authService.authenticateAndAuthorize(request, context);
             if (authResult instanceof Response) return authResult;
             const { user } = authResult;
 
@@ -179,7 +148,7 @@ export class StoryInteractionRouter {
         Logger.info('Creating new session', context);
 
         try {
-            const authResult = await this.authenticateAndAuthorize(request, context);
+            const authResult = await this.authService.authenticateAndAuthorize(request, context);
             if (authResult instanceof Response) return authResult;
             const { user } = authResult;
 
@@ -240,7 +209,7 @@ export class StoryInteractionRouter {
     }
 
     private async interactWithStory(request: Request, sessionId: string, ctx?: ExecutionContext): Promise<Response> {
-        const timer = createTimer();
+        const timer = Date.now();
         const context = {
             component: 'StoryInteractionRouter',
             operation: 'INTERACT_WITH_STORY',
@@ -255,7 +224,7 @@ export class StoryInteractionRouter {
                 return createErrorResponse('Invalid session ID format', 400);
             }
 
-            const authResult = await this.authenticateAndAuthorize(request, context);
+            const authResult = await this.authService.authenticateAndAuthorize(request, context);
             if (authResult instanceof Response) return authResult;
             const { user } = authResult;
 
@@ -347,7 +316,7 @@ export class StoryInteractionRouter {
             Logger.info('Story interaction completed successfully', {
                 ...context,
                 userId: user.id,
-                duration: getElapsed(timer)
+                duration: Date.now() - timer
             });
 
             return new Response(JSON.stringify({ response: narratorResponse }), {
@@ -357,7 +326,7 @@ export class StoryInteractionRouter {
         } catch (error) {
             Logger.error('Story interaction failed', error, {
                 ...context,
-                duration: getElapsed(timer)
+                duration: Date.now() - timer
             });
             return createErrorResponse('Failed to process story interaction', 500);
         }

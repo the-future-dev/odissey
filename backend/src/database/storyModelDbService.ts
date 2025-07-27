@@ -1,5 +1,5 @@
 import { StoryModel } from './db-types';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 
 export class StoryModelDbService {
   constructor(private db: D1Database) {

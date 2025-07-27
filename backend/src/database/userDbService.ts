@@ -1,5 +1,5 @@
 import { User } from './db-types';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 // type D1Database should be provided by your environment (e.g., Cloudflare D1)
 
 export class UserDbService {
@@ -20,6 +20,13 @@ export class UserDbService {
     return await this.db
       .prepare('SELECT * FROM users WHERE id = ?')
       .bind(userId)
+      .first<User>();
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    return await this.db
+      .prepare('SELECT * FROM users WHERE email = ?')
+      .bind(email)
       .first<User>();
   }
 

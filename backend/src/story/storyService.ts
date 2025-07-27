@@ -1,6 +1,6 @@
 import { Session, World, User, StoryModel, Chapter, Message } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 
 import { StoryInitializer, StoryInitializerInput, StoryInitializerOutput } from './storyInitializer';
 import { StoryPredictor, InitializeChaptersInput, UpdateFutureChaptersInput, StoryPredictorOutput } from './storyPredictor';

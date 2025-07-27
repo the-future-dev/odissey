@@ -1,4 +1,4 @@
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 
 /**
  * Shared utilities for MPC Story Agents

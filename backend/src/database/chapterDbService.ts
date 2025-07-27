@@ -1,5 +1,5 @@
 import { Chapter } from './db-types';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 
 export class ChapterDbService {
   constructor(private db: D1Database) {

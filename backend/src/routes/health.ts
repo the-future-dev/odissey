@@ -1,7 +1,5 @@
-import { 
-  createJsonResponse,
-  logRequest
-} from '../utils';
+import { createJsonResponse } from '../utils/response';
+import { logRequest } from '../utils/requestLogger';
 
 export class HealthRouter {
   async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {

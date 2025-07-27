@@ -1,7 +1,7 @@
 import { StoryModel, Chapter, Message } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
-import { Logger } from '../utils';
+import { Logger } from '../utils/logger';
 import { User } from '../database/db-types';
 
 export interface OptimizerInput {

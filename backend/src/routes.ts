@@ -1,4 +1,6 @@
-import { createErrorResponse, logRequest, Logger } from './utils';
+import { createErrorResponse } from './utils/response';
+import { logRequest } from './utils/requestLogger';
+import { Logger } from './utils/logger';
 
 // === ENVIRONMENT BINDINGS ===
 export interface Env {

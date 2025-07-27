@@ -1,14 +1,11 @@
-import { 
-  createJsonResponse, 
-  createErrorResponse, 
-  extractBearerToken,
-  parseJsonBody,
-  validateRequiredFields,
-  logRequest
-} from '../utils';
+import { createJsonResponse, createErrorResponse, parseJsonBody } from '../utils/response';
+import { validateProfileUpdateRequest } from '../utils/validation';
+import { logRequest } from '../utils/requestLogger';
+import { handleAuthError, handleServerError, isAuthError } from '../utils/errorHandling';
 import { OAuthService, UserDbService } from '../database';
 import { Env } from '../routes';
 import { User } from '../database/db-types';
+import { AuthService } from '../utils/authService';
 
 export interface ProfileUpdateRequest {
   name?: string;
@@ -28,12 +25,13 @@ export interface ProfileResponse {
 }
 
 export class ProfileRouter {
-  private oAuth: OAuthService;
   private userDB: UserDbService;
+  private authService: AuthService;
 
   constructor(env: Env) {
-    this.oAuth = new OAuthService(env.DB);
+    const oAuth = new OAuthService(env.DB);
     this.userDB = new UserDbService(env.DB);
+    this.authService = new AuthService(oAuth, this.userDB);
   }
 
   async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
@@ -56,44 +54,12 @@ export class ProfileRouter {
   }
 
   /**
-   * Authenticate user with Google OAuth token
-   * Returns user object if authenticated, throws error if not
-   */
-  private async authenticateUser(request: Request): Promise<User> {
-    const authHeader = request.headers.get('Authorization');
-    const token = extractBearerToken(authHeader);
-
-    if (!token) {
-      throw new Error('Missing authorization header');
-    }
-
-    // Get Google OAuth session
-    const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
-    if (!oauthSession) {
-      throw new Error('Invalid or expired token');
-    }
-
-    // Check if token is expired
-    if (new Date(oauthSession.expires_at) <= new Date()) {
-      await this.oAuth.deleteOAuthSession(oauthSession.id);
-      throw new Error('Token expired');
-    }
-
-    const user = await this.userDB.getUserById(oauthSession.user_id);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    return user;
-  }
-
-  /**
    * Get user profile with their worlds
    */
   private async getProfile(request: Request): Promise<Response> {
     try {
       // Authenticate user
-      const user = await this.authenticateUser(request);
+      const user = await this.authService.authenticateUser(request);
 
       // Get user's worlds/sessions
       const userWorlds = await this.userDB.getUserSessionsWithWorlds(user.id);
@@ -105,17 +71,11 @@ export class ProfileRouter {
 
       return createJsonResponse(response);
     } catch (error) {
-      if (error instanceof Error && (
-        error.message.includes('Missing authorization') ||
-        error.message.includes('Invalid or expired token') ||
-        error.message.includes('Token expired') ||
-        error.message.includes('User not found')
-      )) {
-        return createErrorResponse(error.message, 401, 'Unauthorized');
+      if (error instanceof Error && isAuthError(error)) {
+        return handleAuthError(error, { component: 'ProfileRouter', operation: 'GET_PROFILE' });
       }
       
-      console.error('Error fetching profile:', error);
-      return createErrorResponse('Failed to fetch profile', 500);
+      return handleServerError(error, 'fetch profile', { component: 'ProfileRouter', operation: 'GET_PROFILE' });
     }
   }
 
@@ -125,23 +85,16 @@ export class ProfileRouter {
   private async updateProfile(request: Request): Promise<Response> {
     try {
       // Authenticate user
-      const user = await this.authenticateUser(request);
+      const user = await this.authService.authenticateUser(request);
 
       const body = await parseJsonBody<ProfileUpdateRequest>(request);
 
-      // Validate input
-      if (!body.name && !body.language) {
-        return createErrorResponse('At least one field (name or language) must be provided', 400);
+      // Validate input using utils
+      const validationError = validateProfileUpdateRequest(body);
+      if (validationError) {
+        return createErrorResponse(validationError, 400);
       }
-
-      if (body.name && (typeof body.name !== 'string' || body.name.trim().length === 0)) {
-        return createErrorResponse('Name must be a non-empty string', 400);
-      }
-
-      if (body.language && !['English', 'French', 'German', 'Italian', 'Swedish', 'Spanish', 'Portuguese'].includes(body.language)) {
-        return createErrorResponse('Language must be one of: English, French, German, Italian, Swedish, Spanish, Portuguese', 400);
-      }
-
+      
       // Prepare updates
       const updates: { name?: string; language?: string } = {};
       if (body.name) {
@@ -164,17 +117,12 @@ export class ProfileRouter {
 
       return createJsonResponse(response);
     } catch (error) {
-      if (error instanceof Error && (
-        error.message.includes('Missing authorization') ||
-        error.message.includes('Invalid or expired token') ||
-        error.message.includes('Token expired') ||
-        error.message.includes('User not found')
-      )) {
-        return createErrorResponse(error.message, 401, 'Unauthorized');
+      if (error instanceof Error && isAuthError(error)) {
+        return handleAuthError(error, { component: 'ProfileRouter', operation: 'UPDATE_PROFILE' });
       }
       
-      console.error('Error updating profile:', error);
-      return createErrorResponse('Failed to update profile', 500);
+      return handleServerError(error, 'update profile', { component: 'ProfileRouter', operation: 'UPDATE_PROFILE' });
     }
   }
-} 
+}
+ 
