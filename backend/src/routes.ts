@@ -24,6 +24,7 @@ export interface Env {
 import { GoogleAuthRouter } from './routes/googleAuth';
 import { StoryInteractionRouter } from './routes/storyInteraction';
 import { WorldsRouter } from './routes/worlds';
+import { WorldGenerationRouter } from './routes/worldGeneration';
 import { ProfileRouter } from './routes/profile';
 import { HealthRouter } from './routes/health';
 
@@ -36,6 +37,7 @@ export class ApiRouter {
   private googleAuthRouter: GoogleAuthRouter;
   private storyInteractionRouter: StoryInteractionRouter;
   private worldsRouter: WorldsRouter;
+  private worldGenerationRouter: WorldGenerationRouter;
   private profileRouter: ProfileRouter;
   private healthRouter: HealthRouter;
   private authService: AuthService; // Add authService as a member
@@ -49,6 +51,7 @@ export class ApiRouter {
     this.googleAuthRouter = new GoogleAuthRouter(env, oAuthService, userDbService, this.authService);
     this.storyInteractionRouter = new StoryInteractionRouter(env, this.authService, userDbService);
     this.worldsRouter = new WorldsRouter(env, this.authService, userDbService);
+    this.worldGenerationRouter = new WorldGenerationRouter(this.authService);
     this.profileRouter = new ProfileRouter(this.authService, userDbService); // ProfileRouter no longer needs env directly
     this.healthRouter = new HealthRouter(); // HealthRouter doesn't need services
   }
@@ -109,6 +112,16 @@ export class ApiRouter {
             return createErrorResponse('Route not found', 404, 'Not Found');
           }
           return worldsResponse;
+        });
+      }
+
+      if (pathname.startsWith('/world-generation')) {
+        return await this.handleAuthenticatedRoute(request, ctx, async (req, user, context) => {
+          const worldGenerationResponse = await this.worldGenerationRouter.route(req, user, context);
+          if (worldGenerationResponse === null) {
+            return createErrorResponse('Route not found', 404, 'Not Found');
+          }
+          return worldGenerationResponse;
         });
       }
 
