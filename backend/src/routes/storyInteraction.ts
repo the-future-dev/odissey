@@ -11,6 +11,7 @@ import { AIServiceManager, GeminiProvider, HuggingFaceProvider } from '../ai';
 import { OAuthService, UserDbService, WorldDbService, SessionDbService, StoryModelDbService, ChapterDbService, MessageDbService } from '../database';
 import { Chapter } from '../database/db-types';
 import { AuthService } from '../utils/authService';
+import { User } from '../database/db-types';
 
 export class StoryInteractionRouter {
     private oAuth: OAuthService;
@@ -24,7 +25,7 @@ export class StoryInteractionRouter {
     private storyService: StoryService;
     private authService: AuthService;
 
-    constructor(env: Env) {
+    constructor(env: Env, authService: AuthService, userDB: UserDbService) {
         const timer = Date.now();
         const context = {
             component: 'StoryInteractionRouter',
@@ -33,8 +34,12 @@ export class StoryInteractionRouter {
 
         Logger.info('Initializing StoryInteractionRouter', context);
 
+        // Use passed-in services
+        this.authService = authService;
+        this.userDB = userDB;
+
+        // Instantiate other DB services using env.DB
         this.oAuth = new OAuthService(env.DB);
-        this.userDB = new UserDbService(env.DB);
         this.worldDB = new WorldDbService(env.DB);
         this.sessionDB = new SessionDbService(env.DB);
         this.storyModelDB = new StoryModelDbService(env.DB);
@@ -53,12 +58,11 @@ export class StoryInteractionRouter {
         }
 
         this.storyService = new StoryService(this.aiService);
-        this.authService = new AuthService(this.oAuth, this.userDB);
 
         Logger.info('StoryInteractionRouter initialized successfully', { ...context, duration: Date.now() - timer });
     }
 
-    async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
+    async route(request: Request, user: User, ctx?: ExecutionContext): Promise<Response | null> {
         const timer = Date.now();
         const url = new URL(request.url);
         const method = request.method;
@@ -75,21 +79,21 @@ export class StoryInteractionRouter {
 
         if (pathname === '/sessions/new' && method === 'POST') {
             Logger.info('Routing to create session', { ...context, operation: 'ROUTE_TO_CREATE_SESSION', duration: Date.now() - timer });
-            return this.createSession(request, ctx);
+            return this.createSession(request, user, ctx);
         }
 
         const chaptersMatch = pathname.match(/^\/sessions\/([^\/]+)\/chapters$/);
         if (chaptersMatch && method === 'GET') {
             const sessionId = chaptersMatch[1];
             Logger.info('Routing to get chapters', { ...context, sessionId, operation: 'ROUTE_TO_GET_CHAPTERS', duration: Date.now() - timer });
-            return this.getChapters(request, sessionId);
+            return this.getChapters(request, user, sessionId);
         }
 
         const sessionInteractMatch = pathname.match(/^\/sessions\/([^\/]+)\/interact$/);
         if (sessionInteractMatch && method === 'POST') {
             const sessionId = sessionInteractMatch[1];
             Logger.info('Routing to story interaction', { ...context, sessionId, operation: 'ROUTE_TO_INTERACT', duration: Date.now() - timer });
-            return await this.interactWithStory(request, sessionId, ctx);
+            return await this.interactWithStory(request, user, sessionId, ctx);
         }
 
         Logger.debug('Route not handled by StoryInteractionRouter', { ...context, duration: Date.now() - timer });
@@ -106,7 +110,7 @@ export class StoryInteractionRouter {
         return { history, current, future };
     }
 
-    private async getChapters(request: Request, sessionId: string): Promise<Response> {
+    private async getChapters(request: Request, user: User, sessionId: string): Promise<Response> {
         const context = {
             component: 'StoryInteractionRouter',
             operation: 'GET_CHAPTERS',
@@ -119,10 +123,6 @@ export class StoryInteractionRouter {
                 Logger.warn('Invalid session ID format', context);
                 return createErrorResponse('Invalid session ID format', 400);
             }
-
-            const authResult = await this.authService.authenticateAndAuthorize(request, context);
-            if (authResult instanceof Response) return authResult;
-            const { user } = authResult;
 
             const session = await this.sessionDB.getSessionWithUser(sessionId, user.id);
             if (!session) {
@@ -140,7 +140,7 @@ export class StoryInteractionRouter {
         }
     }
 
-    private async createSession(request: Request, ctx?: ExecutionContext): Promise<Response> {
+    private async createSession(request: Request, user: User, ctx?: ExecutionContext): Promise<Response> {
         const context = {
             component: 'StoryInteractionRouter',
             operation: 'CREATE_SESSION'
@@ -148,10 +148,6 @@ export class StoryInteractionRouter {
         Logger.info('Creating new session', context);
 
         try {
-            const authResult = await this.authService.authenticateAndAuthorize(request, context);
-            if (authResult instanceof Response) return authResult;
-            const { user } = authResult;
-
             const body = await parseJsonBody<{ worldId: string }>(request);
             const validationError = validateRequiredFields(body, ['worldId']);
             if (validationError) {
@@ -191,7 +187,7 @@ export class StoryInteractionRouter {
                 await this.chapterDB.createChapter(session.id, 1, chapters.currentChapter.title, chapters.currentChapter.description, 'current');
                 
                 const chapterCreationPromises = chapters.futureChapters.map((chapter, i) => 
-                    this.chapterDB.createChapter(session.id, i + 2, chapter.title, chapter.description, 'future')
+                    this.chapterDB.createChapter(session.id, 2 + i, chapter.title, chapter.description, 'future')
                 );
                 await Promise.all(chapterCreationPromises);
                 
@@ -208,7 +204,7 @@ export class StoryInteractionRouter {
         }
     }
 
-    private async interactWithStory(request: Request, sessionId: string, ctx?: ExecutionContext): Promise<Response> {
+    private async interactWithStory(request: Request, user: User, sessionId: string, ctx?: ExecutionContext): Promise<Response> {
         const timer = Date.now();
         const context = {
             component: 'StoryInteractionRouter',
@@ -223,10 +219,6 @@ export class StoryInteractionRouter {
                 Logger.warn('Invalid session ID format', context);
                 return createErrorResponse('Invalid session ID format', 400);
             }
-
-            const authResult = await this.authService.authenticateAndAuthorize(request, context);
-            if (authResult instanceof Response) return authResult;
-            const { user } = authResult;
 
             const body = await parseJsonBody<InteractWithStoryRequest>(request);
             const validationError = validateRequiredFields(body, ['message']);

@@ -25,11 +25,11 @@ export class GoogleAuthRouter {
   private authService: AuthService;
   private oauthUtils: OAuthUtils;
 
-  constructor(env: Env) {
-    this.oAuth = new OAuthService(env.DB);
-    this.userDB = new UserDbService(env.DB);
+  constructor(env: Env, oAuth: OAuthService, userDB: UserDbService, authService: AuthService) {
+    this.oAuth = oAuth;
+    this.userDB = userDB;
     this.env = env;
-    this.authService = new AuthService(this.oAuth, this.userDB);
+    this.authService = authService;
     this.oauthUtils = new OAuthUtils(this.oAuth, this.userDB, this.env);
     this.oauthUtils.validateOAuthConfiguration();
   }
