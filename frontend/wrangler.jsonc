@@ -15,6 +15,21 @@
     "enabled": true,
     "head_sampling_rate": 1.0
   },
+  /**
+	 * D1 Database
+	 * https://developers.cloudflare.com/d1/
+	 */
+	"services": [
+		{
+			"binding": "BACKEND",
+			"service": "odissey-backend"
+		}
+	],
+
+	/**
+	 * Environment Variables
+	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
+	 */
   "vars": {
     "LOG_LEVEL": "INFO",
     "LOG_SAMPLING_RATE": "1.0",

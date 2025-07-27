@@ -9,8 +9,17 @@ interface ExecutionContext {
   passThroughOnException(): void;
 }
 
+interface Env {
+  ASSETS: {
+    fetch(request: Request): Promise<Response>;
+  };
+  BACKEND: {
+    fetch(request: Request): Promise<Response>;
+  };
+}
+
 interface ExportedHandler {
-  fetch(request: Request, env: any, ctx?: ExecutionContext): Promise<Response>;
+  fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response>;
 }
 
 interface LogContext {
@@ -123,7 +132,7 @@ function getElapsed(start: number): number {
 }
 
 export default {
-  async fetch(request: Request, env: any): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const requestTimer = createTimer();
     const requestId = crypto.randomUUID().substring(0, 8);
     const url = new URL(request.url);
@@ -138,66 +147,81 @@ export default {
     try {
       let response: Response;
       
-      // Handle API requests - proxy to backend
+      // Handle API requests - proxy to backend using service binding
       if (url.pathname.startsWith("/api/")) {
-        const backendUrl = "https://odissey-backend.andre-ritossa.workers.dev";
-        const proxyUrl = new URL(url.pathname + url.search, backendUrl);
-        
-        FrontendLogger.info(`Proxying API request to backend`, {
+        FrontendLogger.info(`Routing API request to backend service`, {
           requestId,
           component: 'FRONTEND_WORKER',
-          operation: 'API_PROXY',
+          operation: 'SERVICE_BINDING',
           metadata: {
             originalUrl: url.pathname,
-            proxyUrl: proxyUrl.toString(),
-            method: request.method
+            method: request.method,
+            useServiceBinding: !!env.BACKEND
           }
         });
 
-        const proxyTimer = createTimer();
+        const serviceTimer = createTimer();
         
         try {
-          response = await fetch(proxyUrl, {
-            method: request.method,
-            headers: request.headers,
-            body: request.body,
-          });
+          // Use service binding for direct worker-to-worker communication
+          if (env.BACKEND) {
+            response = await env.BACKEND.fetch(request);
+          } else {
+            // Fallback to external URL if service binding is not available
+            const backendUrl = "https://odissey-backend.andre-ritossa.workers.dev";
+            const proxyUrl = new URL(url.pathname + url.search, backendUrl);
+            
+            FrontendLogger.warn(`Service binding not available, falling back to external URL`, {
+              requestId,
+              component: 'FRONTEND_WORKER',
+              operation: 'FALLBACK_FETCH',
+              metadata: { proxyUrl: proxyUrl.toString() }
+            });
+            
+            response = await fetch(proxyUrl, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body,
+            });
+          }
 
-          const proxyDuration = getElapsed(proxyTimer);
+          const serviceDuration = getElapsed(serviceTimer);
           
-          FrontendLogger.info(`Backend proxy response received`, {
+          FrontendLogger.info(`Backend service response received`, {
             requestId,
             component: 'FRONTEND_WORKER',
-            operation: 'API_PROXY_RESPONSE',
-            duration: proxyDuration,
+            operation: 'SERVICE_RESPONSE',
+            duration: serviceDuration,
             metadata: {
               status: response.status,
               statusText: response.statusText,
-              contentType: response.headers.get('Content-Type')
+              contentType: response.headers.get('Content-Type'),
+              usedServiceBinding: !!env.BACKEND
             }
           });
 
-          FrontendLogger.performance('proxy_request_duration', proxyDuration, 'ms', {
+          FrontendLogger.performance('service_request_duration', serviceDuration, 'ms', {
             requestId,
             metadata: {
               method: request.method,
               endpoint: url.pathname,
-              status: response.status
+              status: response.status,
+              usedServiceBinding: !!env.BACKEND
             }
           });
 
-        } catch (proxyError) {
-          const proxyDuration = getElapsed(proxyTimer);
+        } catch (serviceError) {
+          const serviceDuration = getElapsed(serviceTimer);
           
-          FrontendLogger.error(`Backend proxy failed`, proxyError, {
+          FrontendLogger.error(`Backend service call failed`, serviceError, {
             requestId,
             component: 'FRONTEND_WORKER',
-            operation: 'API_PROXY_ERROR',
-            duration: proxyDuration,
+            operation: 'SERVICE_ERROR',
+            duration: serviceDuration,
             metadata: {
               originalUrl: url.pathname,
-              proxyUrl: proxyUrl.toString(),
-              method: request.method
+              method: request.method,
+              usedServiceBinding: !!env.BACKEND
             }
           });
           
@@ -288,7 +312,8 @@ export default {
           method: request.method,
           path: url.pathname,
           status: response.status,
-          isApiRequest: url.pathname.startsWith("/api/")
+          isApiRequest: url.pathname.startsWith("/api/"),
+          usedServiceBinding: url.pathname.startsWith("/api/") && !!env.BACKEND
         }
       });
 
