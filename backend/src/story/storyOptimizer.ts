@@ -1,7 +1,6 @@
 import { StoryModel, Chapter, Message } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
-import { DatabaseService } from '../database/database';
 import { Logger } from '../utils';
 import { User } from '../database/db-types';
 
@@ -24,11 +23,9 @@ export interface OptimizerOutput {
  */
 export class StoryOptimizer {
   private aiService: AIServiceManager;
-  private db: DatabaseService;
 
-  constructor(aiService: AIServiceManager, db: DatabaseService) {
+  constructor(aiService: AIServiceManager) {
     this.aiService = aiService;
-    this.db = db;
   }
 
   /**
@@ -101,9 +98,6 @@ What should happen next?`;
       const decomposition = decompositionMatch[1].trim();
       const shouldTransition = transitionMatch ? transitionMatch[1] === 'YES' : false;
       const rhythm = rhythmMatch ? rhythmMatch[1] : '-UNDEFINED-';
-
-      // Update the chapter with the new decomposition
-      await this.db.updateChapterDecomposition(input.currentChapter.id, decomposition);
 
       const output: OptimizerOutput = {
         decomposition,

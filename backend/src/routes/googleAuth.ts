@@ -5,7 +5,7 @@ import {
   parseJsonBody, 
   logRequest
 } from '../utils';
-import { DatabaseService } from '../database/database';
+import { OAuthService, UserDbService } from '../database';
 import { Env } from '../routes';
 import { User, GoogleOAuthSession } from '../database/db-types';
 
@@ -25,11 +25,13 @@ interface GoogleUserInfo {
 }
 
 export class GoogleAuthRouter {
-  private db: DatabaseService;
+  private oAuth: OAuthService;
+  private userDB: UserDbService;
   private env: Env;
 
   constructor(env: Env) {
-    this.db = new DatabaseService(env.DB);
+    this.oAuth = new OAuthService(env.DB);
+    this.userDB = new UserDbService(env.DB);
     this.env = env;
     this.validateOAuthConfiguration();
   }
@@ -256,7 +258,7 @@ export class GoogleAuthRouter {
       }
 
       // Find OAuth session by access token
-      const oauthSession = await this.db.getOAuthSessionByToken(token);
+      const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
 
       if (!oauthSession) {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
@@ -271,7 +273,7 @@ export class GoogleAuthRouter {
             await this.updateOAuthSession(oauthSession.id, refreshedTokens);
             
             // Return success with updated user info
-            const user = await this.db.getUserById(oauthSession.user_id);
+            const user = await this.userDB.getUserById(oauthSession.user_id);
             if (!user) {
               throw new Error('User not found');
             }
@@ -286,17 +288,17 @@ export class GoogleAuthRouter {
             });
           } catch (refreshError) {
             console.error('Token refresh failed:', refreshError);
-            await this.db.deleteOAuthSession(oauthSession.id);
+            await this.oAuth.deleteOAuthSession(oauthSession.id);
             return createErrorResponse('Token expired and refresh failed', 401, 'Unauthorized');
           }
         } else {
-          await this.db.deleteOAuthSession(oauthSession.id);
+          await this.oAuth.deleteOAuthSession(oauthSession.id);
           return createErrorResponse('Token expired', 401, 'Unauthorized');
         }
       }
 
       // Token is valid, return user info
-      const user = await this.db.getUserById(oauthSession.user_id);
+      const user = await this.userDB.getUserById(oauthSession.user_id);
       if (!user) {
         throw new Error('User not found');
       }
@@ -325,7 +327,7 @@ export class GoogleAuthRouter {
       const token = extractBearerToken(authHeader);
 
       if (token) {
-        const oauthSession = await this.db.getOAuthSessionByToken(token);
+        const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
         if (oauthSession) {
           // Revoke token with Google
           try {
@@ -335,7 +337,7 @@ export class GoogleAuthRouter {
           }
           
           // Delete from our database
-          await this.db.deleteOAuthSession(oauthSession.id);
+          await this.oAuth.deleteOAuthSession(oauthSession.id);
         }
       }
 
@@ -359,7 +361,7 @@ export class GoogleAuthRouter {
       }
 
       // Find OAuth session by access token
-      const oauthSession = await this.db.getOAuthSessionByToken(token);
+      const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
 
       if (!oauthSession) {
         return createErrorResponse('Invalid or expired token', 401, 'Unauthorized');
@@ -367,12 +369,12 @@ export class GoogleAuthRouter {
 
       // Check if token is expired
       if (new Date(oauthSession.expires_at) <= new Date()) {
-        await this.db.deleteOAuthSession(oauthSession.id);
+        await this.oAuth.deleteOAuthSession(oauthSession.id);
         return createErrorResponse('Token expired', 401, 'Unauthorized');
       }
 
       // Get user info
-      const user = await this.db.getUserById(oauthSession.user_id);
+      const user = await this.userDB.getUserById(oauthSession.user_id);
       if (!user) {
         return createErrorResponse('User not found', 401, 'Unauthorized');
       }
@@ -488,17 +490,17 @@ export class GoogleAuthRouter {
   }
 
   private async createOrUpdateUser(userInfo: GoogleUserInfo): Promise<User> {
-    const existingUser = await this.db.getUserByGoogleId(userInfo.id);
+    const existingUser = await this.userDB.getUserByGoogleId(userInfo.id);
     
     if (existingUser) {
       // Update existing user
-      const updatedUser = await this.db.updateUser(existingUser.id, {
+      const updatedUser = await this.userDB.updateUser(existingUser.id, {
         last_login_at: new Date().toISOString()
       });
       return updatedUser;
     } else {
       // Create new user
-      const newUser = await this.db.createUser({
+      const newUser = await this.userDB.createUser({
         google_id: userInfo.id,
         email: userInfo.email,
         name: userInfo.name,
@@ -511,7 +513,7 @@ export class GoogleAuthRouter {
   private async createOAuthSession(userId: number, tokenData: GoogleTokenResponse): Promise<GoogleOAuthSession> {
     const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000));
     
-    return await this.db.createOAuthSession({
+    return await this.oAuth.createOAuthSession({
       user_id: userId,
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
@@ -543,7 +545,7 @@ export class GoogleAuthRouter {
   private async updateOAuthSession(sessionId: number, tokenData: { access_token: string; expires_in: number }): Promise<void> {
     const expiresAt = new Date(Date.now() + (tokenData.expires_in * 1000));
     
-    await this.db.updateOAuthSession(sessionId, {
+    await this.oAuth.updateOAuthSession(sessionId, {
       access_token: tokenData.access_token,
       expires_at: expiresAt.toISOString()
     });

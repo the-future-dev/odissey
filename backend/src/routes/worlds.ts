@@ -5,14 +5,18 @@ import {
   isValidWorldId,
   logRequest
 } from '../utils';
-import { DatabaseService } from '../database/database';
+import { OAuthService, WorldDbService, UserDbService } from '../database';
 import { Env } from '../routes';
 
 export class WorldsRouter {
-  private db: DatabaseService;
+  private worldDB: WorldDbService;
+  private oAuth: OAuthService;
+  private userDB: UserDbService;
 
   constructor(env: Env) {
-    this.db = new DatabaseService(env.DB);
+    this.worldDB = new WorldDbService(env.DB);
+    this.oAuth = new OAuthService(env.DB);
+    this.userDB = new UserDbService(env.DB);
   }
 
   async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
@@ -53,18 +57,18 @@ export class WorldsRouter {
     }
 
     // Get Google OAuth session
-    const oauthSession = await this.db.getOAuthSessionByToken(token);
+    const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
     if (!oauthSession) {
       throw new Error('Invalid or expired token');
     }
 
     // Check if token is expired
     if (new Date(oauthSession.expires_at) <= new Date()) {
-      await this.db.deleteOAuthSession(oauthSession.id);
+      await this.oAuth.deleteOAuthSession(oauthSession.id);
       throw new Error('Token expired');
     }
 
-    const user = await this.db.getUserById(oauthSession.user_id);
+    const user = await this.userDB.getUserById(oauthSession.user_id);
     if (!user) {
       throw new Error('User not found');
     }
@@ -77,7 +81,7 @@ export class WorldsRouter {
       // Authenticate user
       await this.authenticateUser(request);
 
-      const worlds = await this.db.getAllWorlds();
+      const worlds = await this.worldDB.getAllWorlds();
       return createJsonResponse(worlds);
     } catch (error) {
       if (error instanceof Error && (
@@ -116,7 +120,7 @@ export class WorldsRouter {
         .replace(/\s+/g, '-')
         .substring(0, 50) + '-' + Date.now();
 
-      const world = await this.db.createWorld(id, title.trim(), description && typeof description === 'string' ? description.trim() : undefined);
+      const world = await this.worldDB.createWorld(id, title.trim(), description && typeof description === 'string' ? description.trim() : undefined);
       return createJsonResponse(world);
     } catch (error) {
       if (error instanceof Error && (
@@ -142,7 +146,7 @@ export class WorldsRouter {
         return createErrorResponse('Invalid world ID format', 400);
       }
 
-      const world = await this.db.getWorldById(worldId);
+      const world = await this.worldDB.getWorldById(worldId);
       if (!world) {
         return createErrorResponse('World not found', 404, 'Not Found');
       }

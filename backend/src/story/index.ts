@@ -1,24 +1,31 @@
-export { StoryService } from './storyService';
-
-// Export individual agents for direct use if needed
+// Export individual agents
 export { StoryInitializer } from './storyInitializer';
-export { StoryOptimizer } from './storyOptimizer';
 export { StoryNarrator } from './storyNarrator';
 export { StoryPredictor } from './storyPredictor';
-export { ChapterManager } from './chapterManager';
+export { StoryOptimizer } from './storyOptimizer';
+export { StoryService } from './storyService';
 
 // Export utility functions
 export { extractJsonFromResponse } from './mpcUtils';
 
 // Export interfaces for backward compatibility and direct use
 export type { 
-  StoryInitializerInput 
+  StoryInitializerInput,
+  StoryInitializerOutput
 } from './storyInitializer';
-export type { 
-  OptimizerInput as StoryOptimizerInput,
-  OptimizerOutput as StoryOptimizerOutput
-} from './storyOptimizer';
 export type { 
   NarratorInput as StoryNarratorInput,
   NarratorOutput as StoryNarratorOutput
-} from './storyNarrator'; 
+} from './storyNarrator';
+export type {
+  InitializeChaptersInput,
+  UpdateFutureChaptersInput,
+  StoryPredictorOutput
+} from './storyPredictor';
+export type {
+    ProcessUserInputOutput
+} from './storyService';
+export type {
+    OptimizerInput,
+    OptimizerOutput
+} from './storyOptimizer'; 

@@ -1,7 +1,6 @@
-import { Session, World, StoryModel } from '../database/db-types';
+import { Session, World, StoryModel, User } from '../database/db-types';
 import { AIServiceManager } from '../ai/aiService';
 import { TextToTextRequest } from '../ai/interfaces';
-import { DatabaseService } from '../database/database';
 import { Logger } from '../utils';
 import { extractJsonFromResponse } from './mpcUtils';
 
@@ -11,23 +10,30 @@ export interface StoryInitializerInput {
   user: User;
 }
 
+export interface StoryInitializerOutput {
+  core_theme_moral_message: string;
+  genre_style_voice: string;
+  setting: string;
+  protagonist: string;
+  conflict_sources: string;
+  intended_impact: string;
+}
+
 /**
  * StoryInitializer Agent - Creates the StoryModel for a new session
  * Role: Set up the story framework that guides the entire adventure
  */
 export class StoryInitializer {
   private aiService: AIServiceManager;
-  private db: DatabaseService;
 
-  constructor(aiService: AIServiceManager, db: DatabaseService) {
+  constructor(aiService: AIServiceManager) {
     this.aiService = aiService;
-    this.db = db;
   }
 
   /**
    * Initialize StoryModel from World description
    */
-  async initializeStoryModel(input: StoryInitializerInput): Promise<StoryModel> {
+  async initializeStoryModel(input: StoryInitializerInput): Promise<StoryInitializerOutput> {
     Logger.info(`🎬 STORY INITIALIZER: Creating story model for "${input.world.title}"`);
 
     const systemPrompt = `You are a narrator.
@@ -80,31 +86,20 @@ Remember: The user will be the main character in this story. Make it engaging!`;
       // Parse the JSON response
       const storyModelData = extractJsonFromResponse(response.content);
       
-      // Create the story model in database
-      const storyModel = await this.db.createStoryModel(
-        input.session.id,
-        storyModelData.core_theme_moral_message,
-        storyModelData.genre_style_voice,
-        storyModelData.setting,
-        storyModelData.protagonist,
-        storyModelData.conflict_sources,
-        storyModelData.intended_impact
-      );
-
       // Log the complete StoryModel
       console.log('\n🎯 STORY MODEL CREATED:');
       console.log('='.repeat(80));
-      console.log(`📖 Core Theme: ${storyModel.core_theme_moral_message}`);
-      console.log(`🎭 Genre/Style: ${storyModel.genre_style_voice}`);
-      console.log(`🌍 Setting: ${storyModel.setting}`);
-      console.log(`👤 Protagonist: ${storyModel.protagonist}`);
-      console.log(`⚔️ Conflicts: ${storyModel.conflict_sources}`);
-      console.log(`💫 Impact: ${storyModel.intended_impact}`);
+      console.log(`📖 Core Theme: ${storyModelData.core_theme_moral_message}`);
+      console.log(`🎭 Genre/Style: ${storyModelData.genre_style_voice}`);
+      console.log(`🌍 Setting: ${storyModelData.setting}`);
+      console.log(`👤 Protagonist: ${storyModelData.protagonist}`);
+      console.log(`⚔️ Conflicts: ${storyModelData.conflict_sources}`);
+      console.log(`💫 Impact: ${storyModelData.intended_impact}`);
       console.log('='.repeat(80));
 
       Logger.info(`✅ Story model created successfully for session ${input.session.id}`);
 
-      return storyModel;
+      return storyModelData;
     } catch (error) {
       Logger.error(`❌ Failed to initialize story model: ${error instanceof Error ? error.message : String(error)}`);
       throw new Error('Failed to initialize story model');

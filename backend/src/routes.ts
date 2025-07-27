@@ -16,28 +16,22 @@ export interface Env {
 }
 
 // Import all route modules
-import { AuthRouter } from './routes/auth';
 import { GoogleAuthRouter } from './routes/googleAuth';
-import { SessionsRouter } from './routes/sessions';
-import { GenerationRouter } from './routes/generation';
+import { StoryInteractionRouter } from './routes/storyInteraction';
 import { WorldsRouter } from './routes/worlds';
 import { ProfileRouter } from './routes/profile';
 import { HealthRouter } from './routes/health';
 
 export class ApiRouter {
-  private authRouter: AuthRouter;
   private googleAuthRouter: GoogleAuthRouter;
-  private sessionsRouter: SessionsRouter;
-  private generationRouter: GenerationRouter;
+  private storyInteractionRouter: StoryInteractionRouter;
   private worldsRouter: WorldsRouter;
   private profileRouter: ProfileRouter;
   private healthRouter: HealthRouter;
 
   constructor(env: Env) {
-    this.authRouter = new AuthRouter(env);
     this.googleAuthRouter = new GoogleAuthRouter(env);
-    this.sessionsRouter = new SessionsRouter(env);
-    this.generationRouter = new GenerationRouter(env);
+    this.storyInteractionRouter = new StoryInteractionRouter(env);
     this.worldsRouter = new WorldsRouter(env);
     this.profileRouter = new ProfileRouter(env);
     this.healthRouter = new HealthRouter();
@@ -49,10 +43,8 @@ export class ApiRouter {
     try {
       // Try each router in order
       const routers = [
-        this.authRouter,
         this.googleAuthRouter,
-        this.sessionsRouter,
-        this.generationRouter,
+        this.storyInteractionRouter,
         this.worldsRouter,
         this.profileRouter,
         this.healthRouter,

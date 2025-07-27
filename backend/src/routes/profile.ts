@@ -6,7 +6,7 @@ import {
   validateRequiredFields,
   logRequest
 } from '../utils';
-import { DatabaseService } from '../database/database';
+import { OAuthService, UserDbService } from '../database';
 import { Env } from '../routes';
 import { User } from '../database/db-types';
 
@@ -28,10 +28,12 @@ export interface ProfileResponse {
 }
 
 export class ProfileRouter {
-  private db: DatabaseService;
+  private oAuth: OAuthService;
+  private userDB: UserDbService;
 
   constructor(env: Env) {
-    this.db = new DatabaseService(env.DB);
+    this.oAuth = new OAuthService(env.DB);
+    this.userDB = new UserDbService(env.DB);
   }
 
   async route(request: Request, ctx?: ExecutionContext): Promise<Response | null> {
@@ -66,18 +68,18 @@ export class ProfileRouter {
     }
 
     // Get Google OAuth session
-    const oauthSession = await this.db.getOAuthSessionByToken(token);
+    const oauthSession = await this.oAuth.getOAuthSessionByToken(token);
     if (!oauthSession) {
       throw new Error('Invalid or expired token');
     }
 
     // Check if token is expired
     if (new Date(oauthSession.expires_at) <= new Date()) {
-      await this.db.deleteOAuthSession(oauthSession.id);
+      await this.oAuth.deleteOAuthSession(oauthSession.id);
       throw new Error('Token expired');
     }
 
-    const user = await this.db.getUserById(oauthSession.user_id);
+    const user = await this.userDB.getUserById(oauthSession.user_id);
     if (!user) {
       throw new Error('User not found');
     }
@@ -94,7 +96,7 @@ export class ProfileRouter {
       const user = await this.authenticateUser(request);
 
       // Get user's worlds/sessions
-      const userWorlds = await this.db.getUserSessionsWithWorlds(user.id);
+      const userWorlds = await this.userDB.getUserSessionsWithWorlds(user.id);
 
       const response: ProfileResponse = {
         user,
@@ -150,10 +152,10 @@ export class ProfileRouter {
       }
 
       // Update user
-      const updatedUser = await this.db.updateUser(user.id, updates);
+      const updatedUser = await this.userDB.updateUser(user.id, updates);
 
       // Get updated user's worlds
-      const userWorlds = await this.db.getUserSessionsWithWorlds(user.id);
+      const userWorlds = await this.userDB.getUserSessionsWithWorlds(user.id);
 
       const response: ProfileResponse = {
         user: updatedUser,
