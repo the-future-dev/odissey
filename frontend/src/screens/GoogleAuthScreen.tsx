@@ -200,24 +200,16 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.content}>
         <View style={styles.logoContainer}>
-          <Image 
-            source={require('../../assets/icon.png')} 
-            style={styles.logo}
-            resizeMode="contain"
-          />
           <Text style={styles.title}>Welcome to Odyssey</Text>
-          <Text style={styles.subtitle}>AI-Powered Interactive Storytelling</Text>
+          <Text style={styles.subtitle}>Have you ever wanted to be a wizard in the Harry Potter world? Odyssey lets you become the first character in your favorite stories!</Text>
         </View>
 
         <View style={styles.descriptionContainer}>
-          <Text style={styles.description}>
-            Have you ever wanted to be a wizard in the Harry Potter world? 
-            Odyssey lets you become the first character in your favorite stories!
-          </Text>
-          
-          <View style={styles.pocBadge}>
-            <Text style={styles.pocBadgeText}>✨ PROOF OF CONCEPT ✨</Text>
-          </View>
+          <Image 
+            source={require('../../assets/odissea_load.gif')} 
+            // style={styles.logo}
+            resizeMode="contain"
+          />
         </View>
 
         <View style={styles.authContainer}>
@@ -227,13 +219,9 @@ export const GoogleAuthScreen: React.FC<Props> = ({ navigation }) => {
             disabled={isAuthenticating}
           >
             <Text style={styles.googleButtonText}>
-              🔐 Sign in with Google
+              Sign in with Google
             </Text>
           </TouchableOpacity>
-          
-          <Text style={styles.authNote}>
-            Welcome to Odyssey!
-          </Text>
         </View>
       </View>
     </View>
@@ -260,9 +248,7 @@ const styles = StyleSheet.create({
     marginTop: 48,
   },
   logo: {
-    width: 80,
-    height: 80,
-    marginBottom: 16,
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
@@ -278,6 +264,7 @@ const styles = StyleSheet.create({
   },
   descriptionContainer: {
     marginVertical: 24,
+    alignItems: 'center',
   },
   description: {
     fontSize: 16,
