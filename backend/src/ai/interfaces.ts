@@ -19,22 +19,36 @@ export interface TextToTextResponse {
 // === AI PROVIDER INTERFACES ===
 
 export enum AIModality {
-  TextToText = 'text-to-text'
+  TextToText = 'text-to-text',
+  SpeechToText = 'speech-to-text',
+  TextToSpeech = 'text-to-speech',
+  SpeechToSpeech = 'speech-to-speech'
 }
 
+// Base provider interface
 export interface AIProvider {
   readonly name: string;
   readonly supportedModalities: AIModality[];
+}
+
+// Per-modality interfaces
+export interface SupportsTextToText extends AIProvider {
   generateText(request: TextToTextRequest): Promise<TextToTextResponse>;
 }
 
-export interface AIService {
-  registerProvider(provider: AIProvider): void;
-  getProvider(name: string): AIProvider | undefined;
-  setDefaultProvider(name: string): void;
-  generateText(request: TextToTextRequest, providerName?: string): Promise<TextToTextResponse>;
-  listProviders(): Array<{ name: string; supportedModalities: AIModality[] }>;
+export interface SupportsSpeechToText extends AIProvider {
+  transcribeAudio(audio: Blob | ArrayBuffer): Promise<{ text: string }>;
 }
+
+export interface SupportsTextToSpeech extends AIProvider {
+  synthesizeSpeech(text: string): Promise<Blob>;
+}
+
+export interface SupportsSpeechToSpeech extends AIProvider {
+  translateSpeech(audio: Blob): Promise<Blob>;
+}
+
+// Optionally, you can refactor AIService if needed for capability-based access
 
 // === ERROR CLASSES ===
 
