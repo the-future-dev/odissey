@@ -103,46 +103,32 @@ export const useSessionManager = (): UseSessionManagerReturn => {
   }, [currentSession, messages]);
 
   const startSession = async (worldId: string) => {
-    setIsSessionLoading(true);
-    
-    try {
-      // Load existing session first
-      const existingSession = await SessionManager.getSessionByWorld(worldId);
-      
-      if (existingSession.session && existingSession.messages) {
-        setCurrentSession(existingSession.session);
-        setMessages(existingSession.messages);
-        setIsSessionLoading(false);
-        return;
-      }
+  setIsSessionLoading(true);
 
-      // No existing session, create a new one
-      // Authentication is handled by authenticatedFetch in the API layer
-      const session = await createSession(worldId);
-      
-      setCurrentSession(session);
-      
-      const welcomeMessage: Message = {
-        type: 'narrator',
-        text: 'Welcome to your adventure! What would you like to do?',
-        timestamp: new Date()
-      };
-      
-      setMessages([welcomeMessage]);
-      
-      // Save the new session immediately
-      await SessionManager.saveSessionByWorld(worldId, session, [welcomeMessage]);
-      
-      // Automatically send "Let's start!" message after session creation
-      setIsSessionLoading(false); // Stop loading before auto-sending
-      await autoSendStartMessage(session, [welcomeMessage]);
-      
-    } catch (error) {
-      console.error('Failed to start session:', error);
+  try {
+    const existingSession = await SessionManager.getSessionByWorld(worldId);
+
+    if (existingSession.session && existingSession.messages) {
+      setCurrentSession(existingSession.session);
+      setMessages(existingSession.messages);
       setIsSessionLoading(false);
-      throw error;
+      return;
     }
-  };
+
+    const session = await createSession(worldId);
+
+    setCurrentSession(session);
+    setMessages([]);
+    await SessionManager.saveSessionByWorld(worldId, session, []);
+
+    setIsSessionLoading(false);
+    await autoSendStartMessage(session, []);
+  } catch (error) {
+    console.error('Failed to start session:', error);
+    setIsSessionLoading(false);
+    throw error;
+  }
+};
 
   const resetSession = async (worldId: string) => {
     setIsInteracting(false);
@@ -214,23 +200,13 @@ export const useSessionManager = (): UseSessionManagerReturn => {
     setIsInteracting(true);
     
     try {
-      // Add "Let's start!" user message
-      const startMessage: Message = {
-        type: 'user',
-        text: "Let's start!",
-        timestamp: new Date()
-      };
-      
-      const updatedMessages = [...currentMessages, startMessage];
-      setMessages(updatedMessages);
-      
-      // Send message and get response using authenticatedFetch
+      // Send FIRST message and get response using authenticatedFetch
       const response = await authenticatedFetch(`${API_URL}/sessions/${session.sessionId}/interact`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: "Let's start!" }),
+        body: JSON.stringify({ message: "-" }),
       });
 
       const data = await handleResponse<{ response: string }>(response);
@@ -241,7 +217,7 @@ export const useSessionManager = (): UseSessionManagerReturn => {
       const parsedMessages = parseNarratorResponse(data.response, new Date());
       console.log('Auto-start parsed messages:', parsedMessages); // Debug log
       
-      const finalMessages = [...updatedMessages, ...parsedMessages];
+      const finalMessages = [...currentMessages, ...parsedMessages];
       console.log('Auto-start final messages to set:', finalMessages); // Debug log
       setMessages(finalMessages);
       
