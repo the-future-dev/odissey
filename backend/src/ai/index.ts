@@ -1,7 +1,7 @@
 // === AI MODULE EXPORTS (Text-to-Text Only) ===
 
 export { AIModality } from './interfaces';
-export type { AIProvider, AIService, TextToTextRequest, TextToTextResponse } from './interfaces';
+export type { AIProvider, TextToTextRequest, TextToTextResponse } from './interfaces';
 export { AIServiceManager } from './aiService';
 
 // === PROVIDER EXPORTS ===

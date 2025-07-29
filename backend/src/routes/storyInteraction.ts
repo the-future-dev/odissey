@@ -48,10 +48,14 @@ export class StoryInteractionRouter {
 
         this.aiService = new AIServiceManager();
         if (env.GEMINI_API_KEY) {
-            this.aiService.setProvider(new GeminiProvider({ apiKey: env.GEMINI_API_KEY }));
+            const geminiProvider = new GeminiProvider({ apiKey: env.GEMINI_API_KEY });
+            this.aiService.registerProvider(geminiProvider);
+            this.aiService.setDefaultProvider('gemini');
             Logger.info('AI provider configured', { ...context, metadata: { provider: 'Gemini' } });
         } else if (env.HUGGINGFACE_API_KEY?.startsWith('hf_')) {
-            this.aiService.setProvider(new HuggingFaceProvider({ apiKey: env.HUGGINGFACE_API_KEY, model: 'mistralai/Mistral-7B-Instruct-v0.3' }));
+            const hfProvider = new HuggingFaceProvider({ apiKey: env.HUGGINGFACE_API_KEY, model: 'mistralai/Mistral-7B-Instruct-v0.3' });
+            this.aiService.registerProvider(hfProvider);
+            this.aiService.setDefaultProvider('huggingface');
             Logger.info('AI provider configured', { ...context, metadata: { provider: 'HuggingFace', model: 'mistralai/Mistral-7B-Instruct-v0.3' } });
         } else {
             Logger.warn('No AI provider configured - service will not work properly', context);
