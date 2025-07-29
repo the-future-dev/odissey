@@ -265,7 +265,7 @@ export class StoryInteractionRouter {
                 return createErrorResponse('No active chapter found for this session', 404);
             }
 
-            const { narratorResponse, storyOutput, optimizerOutput } = await this.storyService.processUserInput(
+            const { narratorResponse, storyOutput, shouldTransition } = await this.storyService.processUserInput(
                 storyModel,
                 allChapters,
                 recentMessages,
@@ -293,7 +293,7 @@ export class StoryInteractionRouter {
                             await this.chapterDB.createChapter(sessionId, allChapters.history.length + 2 + i, chapter.title, chapter.description, 'future');
                         }
                     }
-                    if (optimizerOutput.shouldTransition) {
+                    if (shouldTransition) {
                         await narratorMessagePromise;
                         await this.chapterDB.completeCurrentChapter(sessionId);
                         await this.chapterDB.setNextChapterAsCurrent(sessionId);

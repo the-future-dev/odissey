@@ -4,13 +4,12 @@ import { Logger } from '../utils/logger';
 
 import { StoryInitializer, StoryInitializerInput, StoryInitializerOutput } from './storyInitializer';
 import { StoryPredictor, InitializeChaptersInput, UpdateFutureChaptersInput, StoryPredictorOutput } from './storyPredictor';
-import { StoryOptimizer, OptimizerInput, OptimizerOutput } from './storyOptimizer';
 import { StoryNarrator, NarratorInput, NarratorOutput } from './storyNarrator';
 
 export interface ProcessUserInputOutput {
   narratorResponse: string;
   storyOutput: StoryPredictorOutput;
-  optimizerOutput: OptimizerOutput;
+  shouldTransition: boolean;
 }
 
 export interface InitializeStoryOutput {
@@ -24,13 +23,11 @@ export interface InitializeStoryOutput {
 export class StoryService {
   private storyInitializer: StoryInitializer;
   private storyPredictor: StoryPredictor;
-  private storyOptimizer: StoryOptimizer;
   private storyNarrator: StoryNarrator;
 
   constructor(aiService: AIServiceManager) {
     this.storyInitializer = new StoryInitializer(aiService);
     this.storyPredictor = new StoryPredictor(aiService);
-    this.storyOptimizer = new StoryOptimizer(aiService);
     this.storyNarrator = new StoryNarrator(aiService);
     
     Logger.info('🎮 StoryService initialized');
@@ -73,7 +70,7 @@ export class StoryService {
   }
 
   /**
-   * Process user input by orchestrating the optimizer, narrator, and predictor agents.
+   * Process user input by orchestrating the narrator and predictor agents.
    */
   async processUserInput(
     storyModel: StoryModel,
@@ -90,21 +87,11 @@ export class StoryService {
       }
       const currentChapter = allChapters.current;
 
-      const optimizerInput: OptimizerInput = {
-        storyModel,
-        currentChapter,
-        recentMessages,
-        userInput,
-        user
-      };
-      const optimizerOutput = await this.storyOptimizer.optimizeStory(optimizerInput);
-
       const narratorInput: NarratorInput = {
         storyModel,
         currentChapter,
         recentMessages,
         userInput,
-        optimizerOutput,
         user
       };
       const narratorOutput = await this.storyNarrator.generateNarrative(narratorInput);
@@ -128,7 +115,7 @@ export class StoryService {
       return {
         narratorResponse,
         storyOutput,
-        optimizerOutput
+        shouldTransition: narratorOutput.shouldTransition
       };
     } catch (error) {
       Logger.error(`❌ Failed to process user input: ${error instanceof Error ? error.message : String(error)}`);
