@@ -145,6 +145,30 @@ export const WorldGenerationScreen: React.FC<Props> = ({ navigation }) => {
       // Send to backend and get response
       const responseBlob = await WorldGenerationAPI.interact(audioBlob);
 
+      // Debug: Inspect received audio response
+      console.log('[WorldGen] Received audio response:', responseBlob);
+      console.log('[WorldGen] Type:', responseBlob.type);
+      console.log('[WorldGen] Size:', responseBlob.size);
+      const arrayBuffer = await responseBlob.arrayBuffer();
+      const byteArray = new Uint8Array(arrayBuffer);
+      const header = Array.from(byteArray.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log('[WorldGen] First 16 bytes (hex):', header);
+      const textHeader = String.fromCharCode(...byteArray.slice(0, 8));
+      console.log('[WorldGen] First 8 bytes (ASCII):', textHeader);
+      if (textHeader.startsWith('{')) {
+        // Looks like JSON, not audio
+        try {
+          const jsonText = new TextDecoder('utf-8').decode(byteArray);
+          console.log('[WorldGen] ERROR: Received JSON instead of audio:', jsonText);
+        } catch (e) {
+          console.log('[WorldGen] ERROR: Received non-audio, could not decode as JSON.');
+        }
+      } else if (!textHeader.startsWith('RIFF')) {
+        console.log('[WorldGen] WARNING: Audio does not start with RIFF header, may not be WAV.');
+      } else {
+        console.log('[WorldGen] Audio response appears to be WAV format.');
+      }
+
       // Clean up any existing response audio URL
       if (responseAudioSource) {
         URL.revokeObjectURL(responseAudioSource);

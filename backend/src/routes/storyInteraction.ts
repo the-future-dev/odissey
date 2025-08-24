@@ -12,6 +12,7 @@ import { OAuthService, UserDbService, WorldDbService, SessionDbService, StoryMod
 import { Chapter } from '../database/db-types';
 import { AuthService } from '../utils/authService';
 import { User } from '../database/db-types';
+import { AIModality, AIProviderType } from '../ai';
 
 export class StoryInteractionRouter {
     private oAuth: OAuthService;
@@ -50,12 +51,12 @@ export class StoryInteractionRouter {
         if (env.GEMINI_API_KEY) {
             const geminiProvider = new GeminiProvider({ apiKey: env.GEMINI_API_KEY });
             this.aiService.registerProvider(geminiProvider);
-            this.aiService.setDefaultProvider('gemini');
+            this.aiService.setDefaultProviderForModality(AIModality.TextToText, AIProviderType.Gemini);
             Logger.info('AI provider configured', { ...context, metadata: { provider: 'Gemini' } });
         } else if (env.HUGGINGFACE_API_KEY?.startsWith('hf_')) {
             const hfProvider = new HuggingFaceProvider({ apiKey: env.HUGGINGFACE_API_KEY, model: 'mistralai/Mistral-7B-Instruct-v0.3' });
             this.aiService.registerProvider(hfProvider);
-            this.aiService.setDefaultProvider('huggingface');
+            this.aiService.setDefaultProviderForModality(AIModality.TextToText, AIProviderType.HuggingFace);
             Logger.info('AI provider configured', { ...context, metadata: { provider: 'HuggingFace', model: 'mistralai/Mistral-7B-Instruct-v0.3' } });
         } else {
             Logger.warn('No AI provider configured - service will not work properly', context);

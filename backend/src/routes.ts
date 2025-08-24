@@ -8,9 +8,12 @@ import { handleAuthError } from './utils/errorHandling';
 // === ENVIRONMENT BINDINGS ===
 export interface Env {
   DB: D1Database;
+  // AI services
   HUGGINGFACE_API_KEY?: string;
   OPENAI_API_KEY?: string;
   GEMINI_API_KEY?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
   // Google OAuth configuration
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
@@ -51,13 +54,13 @@ export class ApiRouter {
     this.googleAuthRouter = new GoogleAuthRouter(env, oAuthService, userDbService, this.authService);
     this.storyInteractionRouter = new StoryInteractionRouter(env, this.authService, userDbService);
     this.worldsRouter = new WorldsRouter(env, this.authService, userDbService);
-    this.worldGenerationRouter = new WorldGenerationRouter(this.authService);
+    this.worldGenerationRouter = new WorldGenerationRouter(this.authService, env);
     this.profileRouter = new ProfileRouter(this.authService, userDbService); // ProfileRouter no longer needs env directly
     this.healthRouter = new HealthRouter(); // HealthRouter doesn't need services
   }
 
   // New helper method for authenticated routes
-  private async handleAuthenticatedRoute(request: Request, ctx: ExecutionContext | undefined, handler: (request: Request, user: User, ctx?: ExecutionContext) => Promise<Response>): Promise<Response> {
+  private async handleAuthenticatedRoute(request: Request, ctx: ExecutionContext | undefined, env: Env, handler: (request: Request, user: User, ctx: ExecutionContext, env: Env) => Promise<Response>): Promise<Response> {
     const authContext = { component: 'ApiRouter', operation: 'AUTHENTICATE_ROUTE' };
     const authResult = await this.authService.authenticateAndAuthorize(request, authContext);
 
@@ -65,10 +68,10 @@ export class ApiRouter {
       return authResult; // Authentication failed, return error response
     }
     const { user } = authResult;
-    return handler(request, user, ctx);
+    return handler(request, user, ctx as ExecutionContext, env);
   }
 
-  async route(request: Request, ctx?: ExecutionContext): Promise<Response> {
+  async route(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     logRequest(request);
 
     try {
@@ -96,7 +99,7 @@ export class ApiRouter {
 
       // Authenticated routes
       if (pathname.startsWith('/profile')) {
-        return await this.handleAuthenticatedRoute(request, ctx, async (req, user, context) => {
+        return await this.handleAuthenticatedRoute(request, ctx, env, async (req, user, context, env) => {
           const profileResponse = await this.profileRouter.route(req, user, context);
           if (profileResponse === null) {
             return createErrorResponse('Route not found', 404, 'Not Found');
@@ -106,7 +109,7 @@ export class ApiRouter {
       }
 
       if (pathname.startsWith('/worlds')) {
-        return await this.handleAuthenticatedRoute(request, ctx, async (req, user, context) => {
+        return await this.handleAuthenticatedRoute(request, ctx, env, async (req, user, context, env) => {
           const worldsResponse = await this.worldsRouter.route(req, user, context);
           if (worldsResponse === null) {
             return createErrorResponse('Route not found', 404, 'Not Found');
@@ -116,8 +119,8 @@ export class ApiRouter {
       }
 
       if (pathname.startsWith('/world-generation')) {
-        return await this.handleAuthenticatedRoute(request, ctx, async (req, user, context) => {
-          const worldGenerationResponse = await this.worldGenerationRouter.route(req, user, context);
+        return await this.handleAuthenticatedRoute(request, ctx, env, async (req, user, context, env) => {
+          const worldGenerationResponse = await this.worldGenerationRouter.route(req, user, context, env);
           if (worldGenerationResponse === null) {
             return createErrorResponse('Route not found', 404, 'Not Found');
           }
@@ -126,7 +129,7 @@ export class ApiRouter {
       }
 
       if (pathname.startsWith('/sessions')) {
-        return await this.handleAuthenticatedRoute(request, ctx, async (req, user, context) => {
+        return await this.handleAuthenticatedRoute(request, ctx, env, async (req, user, context, env) => {
           const storyResponse = await this.storyInteractionRouter.route(req, user, context);
           if (storyResponse === null) {
             return createErrorResponse('Route not found', 404, 'Not Found');

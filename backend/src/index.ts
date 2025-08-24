@@ -95,7 +95,7 @@ export default {
 
 		try {
 			// Route the request
-			const response = await router.route(request, ctx);
+			const response = await router.route(request, env, ctx);
 			
 			// Log response
 			const duration = Date.now() - requestTimer;

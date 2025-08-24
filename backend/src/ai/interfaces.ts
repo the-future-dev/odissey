@@ -1,5 +1,3 @@
-// === AI Provider INTERFACES ===
-
 export interface TextToTextRequest {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
   temperature?: number;
@@ -16,13 +14,17 @@ export interface TextToTextResponse {
   };
 }
 
-// === AI PROVIDER INTERFACES ===
-
 export enum AIModality {
   TextToText = 'text-to-text',
   SpeechToText = 'speech-to-text',
   TextToSpeech = 'text-to-speech',
-  SpeechToSpeech = 'speech-to-speech'
+  SpeechToSpeech = 'speech-to-speech',
+}
+
+export enum AIProviderType {
+  Gemini = 'gemini',
+  Cloudflare = 'cloudflare',
+  HuggingFace = 'huggingface',
 }
 
 // Base provider interface
@@ -48,10 +50,7 @@ export interface SupportsSpeechToSpeech extends AIProvider {
   translateSpeech(audio: Blob): Promise<Blob>;
 }
 
-// Optionally, you can refactor AIService if needed for capability-based access
-
-// === ERROR CLASSES ===
-
+// Error classes
 export class AIProviderError extends Error {
   constructor(message: string, public providerName: string, public originalError?: unknown) {
     super(message);
@@ -64,4 +63,4 @@ export class UnsupportedModalityError extends Error {
     super(`Provider ${providerName} does not support modality: ${modality}`);
     this.name = 'UnsupportedModalityError';
   }
-} 
+}
